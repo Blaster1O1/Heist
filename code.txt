@@ -1,0 +1,1079 @@
+var shift = 0;
+var alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+var playerCanMove = true;
+var frames = 0;
+var keys = [];
+var scene = 'splash';
+var HeistC = 0;
+var gameTxtFade = 0;
+var lvl = 3;
+var loadMap;
+var objects;
+var timeLeft = 60;
+var timeCnt = 0;
+var cursorVisible = true;
+var mouseIsClicked = false;
+var collide = function(o1,o2) {
+    return o1.x < o2.x + o2.w &&
+   o1.x + o1.w > o2.x &&
+   o1.y < o2.y + o2.h &&
+   o1.h + o1.y > o2.y;
+};    
+var changeScene = function(newScene) {
+        scene = newScene;
+        frames = 1;
+};        
+var setConfig = function(obj, config) {
+    for (var propertyName in config) {
+        obj[propertyName] = config[propertyName];
+    }
+}; //Override some properties
+var exactDistance = function(x1, y1, x2, y2) {
+    return sqrt(abs((x2 - x1) * (x2 - x1)) + abs((y1 - y2) * (y1 - y2)));
+};
+var fonts = {
+    // All the fonts used in the program - defined here so they're only created once 
+    arial: createFont('Arial'),
+    arialBoldItalic: createFont('Ari  al Bold Italic'),
+    chalkboard: createFont('Chalkboard'),
+    sans: createFont('sans-serif'),
+    serif: createFont('serif'),
+    tahoma: createFont('Tahoma'),
+    times: createFont('Times'),
+    verdana: createFont('Verdana'),
+    avenir: createFont('avenir'),
+    monospace: createFont('monospace'),
+    oribtron: createFont('Orbitron'),
+    tooltip: createFont('Verdana', 12),
+};
+var mouse = {
+
+    get x() {
+        return mouseX;
+    },
+    get y() {
+        return mouseY;
+    },
+
+    // return `true` if the mouse is inside the defined rectangle/square
+    isInRect: function(left, top, width, height) {
+        // if `height` is not passed, assume a square with all sides of length `width`
+        if (arguments.length < 4) {
+            height = width;
+        }
+        return this.x >= left &&
+            this.x < left + width &&
+            this.y >= top &&
+            this.y < top + height;
+    },
+
+    // return `true` if the mouse is inside the defined ellipse/circle
+    isInEllipse: function(centerX, centerY, width, height) {
+        // if `height` is not passed, assume a circle with a diameter of `width`
+        if (arguments.length < 4) {
+            height = width;
+        }
+        return sq((this.x - centerX) / (width / 2)) + sq((this.y - centerY) / (height / 2)) <= 1;
+    }
+}; {
+    var textType = { // indicates the kind of data accepted into a `Textbox` object
+
+        DIGITS: /\d/, // digits (0..9)
+        ALPHA: /[a-z]/i, // letters, case insensitive
+        ALPHANUMERIC: /[a-z\d]/i, // letters and digits, case insensitive
+        ANYTHING: /[ -~]/ // anything from space to tilde (' '..'~')
+    };
+
+    var Textbox = function(owner, left, top, width, height, textType, maxChars, caption, config) {
+        this.owner = owner; // object that owns this textbox.
+
+        this.left = left; // location of textbox & selection area for mouse.
+        this.top = top;
+        this.width = width;
+        this.height = height;
+
+        this.validRegExp = textType; // RegExp of acceptable characters
+        this.maxChars = maxChars; // not more than `maxChars` characters will be allowed
+        { // object defaults - may be overridden by 'config' parameter
+            this.xAlign = LEFT; // only valid values are `LEFT` and `CENTER`.  Currently no support for `RIGHT`
+            this.caption = caption; // caption that will be drawn to the left of the textbox
+            this.text = ''; // starting value
+            this.isVisible = true; // allow button to be shown/drawn
+            this.isEnabled = true; // allow button to be selected and typed-into
+            this.foreColor = color(0);
+            this.font = fonts.serif;
+            this.fontSize = 26;
+            this.captionColor = this.foreColor;
+            this.captionFont = this.font;
+            this.captionFontSize = this.fontSize;
+
+            this.enterEqualsTab = true; // When multiple textboxes exist, pressing `ENTER` tabs to the next textbox
+        }
+        setConfig(this, config); // override default properties
+    };
+    Object.defineProperty(Textbox.prototype, 'mouseIsOver', {
+        get: function() {
+            return this.isEnabled && this.isVisible && mouse.isInRect(this.left, this.top, this.width, this.height);
+        }
+    });
+
+    Textbox.prototype.draw = function() {
+        if (!this.isVisible) {
+            return;
+        }
+
+        // caption
+
+        if (this.caption && this.captionColor && this.captionFont && this.captionFontSize) {
+            textAlign(RIGHT, CENTER);
+            textFont(this.captionFont, this.captionFontSize);
+            fill(this.captionColor);
+            text(this.caption, this.left, this.top + this.height / 2);
+        }
+
+        // text
+
+        // is this the "current textbox"?
+        var isCurrent = this.owner && this.owner.textboxes && this.owner.textboxes[this.owner.textIndex] === this;
+        textAlign(this.xAlign, CENTER);
+        textFont(this.font, this.fontSize);
+        fill(this.foreColor);
+        // append a blinking "cursor" & to "current textbox"
+        text(this.text + (isCurrent && frameCount % 60 < 30 ? '|' : ' '),
+            this.xAlign === LEFT ? this.left : this.left + this.width / 2,
+            this.top + this.height / 2);
+    };
+} // textType & Textbox
+var tooltip = {
+    x: undefined,
+    y: undefined,
+    w: undefined,
+    h: undefined,
+    txt: undefined,
+    time: 0,
+    isVisible: false,
+    draw: function() {
+        if (this.isVisible) {
+            stroke(0, 0, 0);
+            fill(255, 255, 0, 210);
+            rect(this.x, this.y, this.w, this.h);
+            fill(0, 0, 0, 225);
+            text(this.txt, this.x + 5, this.y + 5);
+        }
+
+    },
+    update: function() {
+        if (mouse.isInRect(this.x, this.y, this.w, this.h)) {
+            this.time++;
+        } else {
+            this.time = 0;
+        }
+        if (this.time >= 70) {
+            this.isVisible = true;
+        }
+    }
+}; //Tooltip
+
+{ //Button
+    var buttonShape = { // possible shapes of a button
+        RECTANGLE: 0,
+        ELLIPSE: 1
+    };
+    var Button = function(x, y, width, height, caption, onClick, config) {
+        // If button's shape is ELLIPSE, (x,y) are the center coordinates.
+        // If button's shape is RECTANGLE, (x,y) are the top/left coordinates.
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.caption = caption;
+        this.onClick = typeof onClick === 'function' ? onClick : function() {}; { // object defaults - may be overridden by 'config' parameter
+            this.isVisible = true; // allow button to be shown/drawn
+            this.isEnabled = true; // allow button to be clicked
+            this.shape = buttonShape.RECTANGLE;
+            this.toolTipText = this.caption;
+            this.borderSize = 1; // the stroke weight of the button's border
+            this.radius = this.height / 4; // only valid for `RECTANGLE` shaped buttons
+            // if a certain color is not wanted (e.g., no border), use `undefined` as the color value
+            this.backColor = color(181); // the fill color of the button's shape
+            this.borderColor = color(255, 255, 255); // the stroke color of the button's shape
+            this.foreColor = color(0); // the color of the caption
+            this.inverseOnMouseOver = true; // draw using 'inverse' colors when mouse is over button
+            this.inverseBackColor = color(255, 0, 0);
+            this.inverseBorderColor = color(255, 0, 0);
+            this.inverseForeColor = this.foreColor;
+            this.inverseBorderSize = this.borderSize + 2;
+            this.font = fonts.chalkboard;
+            this.fontSize = 22;
+            this.time = 0;
+        }
+        setConfig(this, config); // override default properties
+    };
+
+    Object.defineProperty(Button.prototype, 'mouseIsOver', {
+
+        get: function() {
+            return this.isEnabled && this.isVisible &&
+                (this.shape === buttonShape.RECTANGLE ?
+                    mouse.isInRect(this.x, this.y, this.width, this.height) :
+                    mouse.isInEllipse(this.x, this.y, this.width, this.height));
+
+        }
+
+    });
+
+    Button.prototype.draw = function() {
+        if (!this.isVisible) {
+            return;
+        }
+        var useInverse = this.inverseOnMouseOver && this.mouseIsOver;
+        var backColor = useInverse ? this.inverseBackColor : this.backColor;
+        var borderColor = useInverse ? this.inverseBorderColor : this.borderColor;
+        var foreColor = useInverse ? this.inverseForeColor : this.foreColor;
+        var borderSize = useInverse ? this.inverseBorderSize : this.borderSize;
+        tooltip.txt = this.toolTipText;
+        tooltip.x = this.x + 5;
+        tooltip.y = this.y + 6;
+        tooltip.w = 30;
+        tooltip.h = 10;
+        if (borderColor && borderSize) {
+
+            strokeWeight(borderSize);
+            stroke(borderColor);
+        } else {
+            noStroke();
+        }
+        if (backColor) {
+            fill(backColor);
+        } else {
+            noFill();
+        }
+        if (this.shape === buttonShape.RECTANGLE) {
+            rect(this.x, this.y, this.width, this.height, this.radius);
+        } else {
+            ellipse(this.x, this.y, this.width, this.height);
+        }
+
+        if (this.caption !== undefined && this.caption !== '' && foreColor !== undefined && this.font && this.fontSize > 0) {
+            var centerX = this.shape === buttonShape.RECTANGLE ? this.x + this.width / 2 : this.x;
+            var centerY = this.shape === buttonShape.RECTANGLE ? this.y + this.height / 2 : this.y;
+            fill(foreColor);
+            textFont(this.font, this.fontSize);
+            textAlign(CENTER, CENTER);
+            text(this.caption, centerX, centerY);
+        }
+    };
+
+}
+
+var menuBtns = [
+  new Button(300, 300, 60, 60, "PLAY", function() {changeScene('game');}, {shape: buttonShape.ELLIPSE}) 
+]; {
+    var FireParticle = function(x, y, life, speed, maxLife) {
+        this.x = x;
+        this.y = y;
+        this.life = life;
+        this.speed = speed;
+        this.maxLife = maxLife;
+    };
+
+    FireParticle.prototype.draw = function() {
+        var factor = (this.life--) / this.maxLife;
+        fill(255, factor * 255, sin(factor * 20) * 255, factor * 255); // Reduce the 28 to get more yellow/orange in the flame
+        ellipse(this.x, this.y, 25, random(20)); // Increase 18 to change the density/blur of the fire trail - try 25 or 30!
+        this.x -= this.speed;
+    };
+
+    var fire = {
+        maxLife: 40,
+        x: 200,
+        y: 400,
+        height: 30,
+        particles: [],
+        t: 0,
+        draw: function() {
+            this.t += 0.03;
+            var val;
+            for (var i = 0; i < this.height / 3.2; i++) { // lower 2.2 to get a higher particle density (may cause lag)
+                val = random(-90, 90);
+                var y = this.y - sin(val) * this.height / 2;
+                var x = this.x + cos(val) * this.height / 4;
+                val = noise(y / 100, this.t, 0);
+                var life = this.maxLife * (0.8 * (1 - abs((this.y - y) / this.height * 2)) + val - 0.3); // Reduce the 0.3 to get a denser flame (may cause lag)
+                var speed = val * random(3, 5) + 4; // Increase 4 to increase tail length & the appearance of speed
+                this.particles.push(new FireParticle(x + random(0, this.height / 4), y, life, speed, this.maxLife));
+            }
+            val = map(noise(this.t / 20, 0, 0), 0, 1, -3, 3); // -3, 3 are the limits of up & down tail "wag"
+            noStroke();
+            for (var i = this.particles.length - 1; i >= 0; i--) {
+                this.particles[i].draw();
+                this.particles[i].y += val;
+                if (this.particles[i].life <= 0) {
+                    this.particles.splice(i, 1);
+                }
+            }
+        }
+    };
+} // FireParticle & fire
+var shadowText = function(txt, x, y, textColor, shadowColor, offSet, txtSize) {
+    this.txt = txt;
+    this.x = x;
+    this.y = y;
+    this.offSet = offSet;
+    this.txtSize = txtSize;
+
+    this.textColor = textColor;
+    this.shadowColor = shadowColor;
+
+    textAlign(CENTER);
+    textSize(this.txtSize);
+    fill(this.shadowColor);
+    text(this.txt, (this.x + this.offSet), (this.y + this.offSet));
+    fill(this.textColor);
+    text(this.txt, this.x, this.y);
+}; //By awk
+
+var selfTypingText = function(t, x, y, color, speed, delay, depth) {
+    //by Knowledge
+    if (depth) {
+        fill(0, 0, 0);
+        text(t.substring(0, floor(frameCount / speed) - delay), x - 1, y - 2, width, height);
+    }
+    fill(color);
+    text(t.substring(0, floor(frameCount / speed) - delay), x, y, width, height);
+};
+// return `true` when it's time to leave the splash screen
+var drawLogo = function() {
+    // does this function need to be initialized?
+    if (!drawLogo.initialized) {
+        drawLogo.startTime = millis(); // used for timimg the animation & duration of the splash screen
+        drawLogo.dismiss = false; // this will become `true` when it's time to leave the splash screen
+        drawLogo.buttons = [
+            new Button(1, 560, 80, 30, 'Skip', function() {
+                drawLogo.dismiss = true;
+            })
+        ];
+        drawLogo.pos = 400;
+        drawLogo.stars = [];
+        drawLogo.initialized = true;
+    }
+
+    drawLogo.pos /= 1.2;
+    if (drawLogo.stars.length < 30) {
+        drawLogo.stars.push({
+            x: random(0, 600),
+            y: random(0, 600),
+            life: floor(random(40, 160)),
+            size: random(1, 3)
+        });
+    }
+
+    // After 400 frames (~6.7 seconds), the splash screen will be dismissed - unless it's already been dismissed via the "skip" button
+    drawLogo.dismiss = drawLogo.dismiss || (frames >= 400);
+
+    background(17, 17, 36); // "midnight blue"
+
+    // stars
+    noFill();
+    drawLogo.stars.forEach(function(star, i, stars) {
+        (stroke)(255, map(star.life, 0, 80, 0, 255));
+        strokeWeight(star.size);
+        point(star.x, star.y);
+        if (--star.life <= 0) {
+            stars.splice(i, 1);
+        }
+    });
+
+    // "Startech"
+    noStroke();
+    fill(192);
+    textAlign(CENTER, CENTER);
+    textFont(fonts.tahoma, 96);
+    text("S", 165 + drawLogo.pos, 250);
+    textSize(64);
+    text('TARTECH', 325 + drawLogo.pos, 260);
+
+    // "burning" square
+    for (var x = 0; x < 4; x++) {
+        for (var y = 0; y < 4; y++) {
+            fill(242, y * 64 + sin(x * 140 + frames * 10) * 64, 0, y * 128 + 64);
+            ellipse(x * 5 + 115 + drawLogo.pos, y * 5 + 215 + drawLogo.pos, 5, 5);
+        }
+    }
+
+    // "Infinity" sphere
+    fill(255, 255, 128, 32);
+    ellipse(300 + sin(frames) * 100, 300 + sin(frames * 2) * 50 + drawLogo.pos, 120, 120);
+
+    // Fireball
+    var y = constrain(map(frames, 0, 180, 200, 100), 100, 200); // Change 100s to move star's final y-position
+    var x = constrain(map(frames, 0, 180, -30, 280), -30, 280); // Change 280s to move star's final x-position
+    noStroke();
+    for (var d = 30; d > 0; d -= 2) {
+        fill(lerpColor(color(255, 0, 0), color(255, 255, 0), d / 30));
+        ellipse(x, y, d, d);
+    }
+    fire.x = x;
+    fire.y = y;
+    fire.draw();
+
+    // "Presents..." & motto
+    fill(255, 255, 255, map(frames, 200, 300, 0, 255));
+    textFont(fonts.arial, 38);
+    text("Presents...", 293 + drawLogo.pos, 560);
+    selfTypingText("Our motto: Create the best, or nothing.", 0, 69, color(255), 4, 7, false);
+
+    // draw buttons
+    drawLogo.buttons.forEach(function(button) {
+        button.draw();
+    });
+    return drawLogo.dismiss;
+};
+var plr = {
+    x: 0, y: 0,
+    w: 20, h: 20,
+    score: 0,
+    xvel: 0,
+    yvel: 0,
+    funds: 0,
+    falling: true,
+    gravity: 0.4,
+    jumpHeight: 9,
+    maxFallSpeed : 12,
+    moveSpeed: 0.5,
+    maxMoveSpeed: 5,
+    direction: "",
+    update: function(platforms) {
+       // println(this.direction);
+        /* Player Events */
+        if(playerCanMove){if(keys[LEFT]) { this.xvel -= this.moveSpeed; this.direction = "left"; }
+        if(keys[RIGHT]){ this.xvel += this.moveSpeed; this.direction = "right"; }
+           if(this.y >= 600) {
+                loadMap();
+                gameTxtFade = 1;
+            }
+        
+        if(!keys[LEFT] && !keys[RIGHT]) {
+            if(this.xvel>0) {
+                this.xvel -= this.moveSpeed;
+            }
+            if(this.xvel<0) {
+                this.xvel += this.moveSpeed;
+            }
+            /*A quick fix to stop player from
+                moving in a single direction.*/
+            if(this.xvel<0.1&&this.xvel>0){this.xvel=0;}
+            if(this.xvel>-0.1&&this.xvel<0){this.xvel=0;}
+        }
+
+        // Checks if we're able to jump
+        if(keys[UP] && !this.falling) {
+            this.yvel = -this.jumpHeight;
+        }
+        
+        // Adds gravity to player
+        this.yvel += this.gravity;
+        
+        // Checks x and y max velocity speeds
+        if(this.yvel > this.maxFallSpeed) {
+            this.yvel = this.maxFallSpeed;}
+        
+        if(this.xvel > this.maxMoveSpeed) {
+            this.xvel = this.maxMoveSpeed;}
+            
+        if(this.xvel < -this.maxMoveSpeed) {
+            this.xvel = -this.maxMoveSpeed;}
+        
+        
+        this.x += this.xvel;}
+        // Checks LEFT and RIGHT cofllision
+        this.collideWith(this.xvel,0,platforms);
+        
+
+        // Always asume that the player is in the air.
+        // NOTE: This will be set to false if the collideWith function
+        //       finds that the player is on a platform.
+        this.falling = true;
+        
+        
+        this.y += this.yvel;
+        // Checks TOP and BOTTOM collision
+        this.collideWith(0,this.yvel,platforms);
+        
+    },
+    
+    collideWith: function(xv,yv,platforms) {
+        for (var i = 0; i < platforms.length; i++) {
+            var p = platforms[i];
+            if( this.y+this.h > p.y &&
+                this.y        < p.y+p.h &&
+                this.x+this.w > p.x &&
+                this.x        < p.x+p.w)
+            {
+                // BOTTOM
+                if(yv>0) {
+                    this.yvel = 0;
+                    this.falling = false;
+                    this.y = p.y-this.h;
+                }
+                // TOP
+                if(yv<0) {
+                    this.yvel = 0;
+                    this.falling = true;
+                    this.y = p.y+p.h;
+                }
+                // RIGHT
+                if(xv>0) {
+                    this.xvel = 0;
+                    this.x = p.x-this.w;
+                }
+                // LEFT
+                if(xv<0) {
+                    this.xvel = 0;
+                    this.x = p.x+p.w;
+                }
+            }
+        }
+    },
+    
+    draw : function() {
+        noStroke();
+        fill(252, 247, 154, frameCount * 2);
+        rect(this.x, this.y, this.w, this.h);
+        fill(0, 0, 0, frameCount * 2);
+        rect(this.x, this.y + this.w / 1.8, this.w, this.h / 2.2);
+        rect(this.x, this.y, this.w, this.h / 5);
+        fill(255, 0, 255, frameCount * 2);
+        ellipse(sin(frameCount * 6) + this.x + this.w / 4, this.y + this.h / 2.8, this.w / 4, this.h / 4);
+        ellipse(sin(frameCount * 6) + this.x + this.w - this .w / 4, this.y + this.h / 2.8, this.w / 4, this.h / 4);
+    },
+    
+};
+/* Block Object */
+var Block = function (x,y,w,h,c) {
+    this.x = x; this.y = y;
+    this.w = w; this.h = h;
+    this.c = c || color(255,0,0);
+};
+Block.prototype.draw = function() {
+    noStroke();
+    fill(this.c);
+    rect(this.x,this.y,this.w,this.h);
+};
+var blocks = [];
+blocks.add = function(x,y,w,h,c) {
+    blocks.push(new Block(x,y,w,h,c));
+};    
+blocks.apply = function() {
+    blocks.forEach(function(block){block.draw();});
+};   
+var Diamond = function(x,y,w,h) {
+    this.x = x; this.y = y;
+    this.w = w; this.h = h;
+    this.collected = false;
+}; 
+Diamond.prototype.draw = function() {
+    if(!this.collected) {
+        fill(43, 170, 255);
+        beginShape();
+        var x = this.x; var y = this.y;
+        var w = this.w; var h = this.h;
+        vertex(x + w - (w / 4), y);
+        vertex(x + w / 4, y);
+        vertex(x, y + h / 4);
+        vertex(x + w / 2, y + h);
+        vertex(x + w, y + h / 4);
+        endShape();
+        
+        
+        fill(255, 255, 255, 80);
+        beginShape();
+        vertex(x + w / 4, y);
+        vertex(x, y + h / 4);
+        vertex(x + w / 6, y + h / 4);
+        endShape();
+        
+        fill(255, 255, 255, 60);
+        beginShape();
+        vertex(x + w / 6, y + h / 4);
+        vertex(x, y + h / 4);
+        vertex(x + w / 2, y + h);
+        endShape();
+        
+        
+        fill(255, 255, 255, 30);
+        beginShape();
+        vertex(x + w / 4, y);
+        vertex(x + w / 6, y + h / 4);
+        vertex(x + w / 3, y + h / 4);
+        endShape();
+        
+        fill(255, 255, 255, 30);
+        beginShape();
+        vertex(x + w / 3, y + h / 4);
+        vertex(x + w / 6, y + h / 4);
+        vertex(x + w / 2, y + h);
+        endShape();
+        
+        fill(255, 255, 255, 10);
+        beginShape();
+        vertex(x + w / 4, y);
+        vertex(x + w / 2, y);
+        vertex(x + w / 3, y + h / 4);
+        endShape();
+        
+        
+        fill(255, 255, 255, 40);
+        beginShape();
+        vertex(x + w / 2, y);
+        vertex(x + w / 1.5, y + h / 4);
+        vertex(x + w / 3, y + h / 4);
+        endShape();
+        
+        fill(255, 255, 255, 10);
+        beginShape();
+        vertex(x + w / 2, y + h);
+        vertex(x + w / 1.5, y + h / 4);
+        vertex(x + w / 3, y + h / 4);
+        endShape();
+        
+        fill(0, 0, 0, 5);
+        beginShape();
+        vertex(x + w / 2, y + h);
+        vertex(x + w, y + h / 4);
+        vertex(x + w / 1.5, y + h / 4);
+        endShape();
+        
+        fill(0, 0, 0, 15);
+        beginShape();
+        vertex(x + w / 1.35, y);
+        vertex(x + w, y + h / 4);
+        vertex(x + w / 1.5, y + h / 4);
+        endShape();    
+    }
+};  
+Diamond.prototype.update = function() {
+    if(!this.collected) {
+        if(collide(plr,this)) {
+            this.collected = true; 
+            plr.funds += 100;
+        }    
+    }    
+};    
+var diamonds = [];
+diamonds.add = function(x,y,w,h) {
+    diamonds.push(new Diamond(x,y,w,h));  
+};    
+diamonds.apply = function() {
+    diamonds.forEach(function(diamond){diamond.draw(); diamond.update();});  
+};
+var Message = function(txt) {
+    pushStyle();
+    strokeWeight(4);
+    stroke(102, 58, 58);
+    fill(9, 141, 161);
+    rect(40,20,520,200); 
+    fill(255);
+    textFont(fonts.arial,25);
+    text(txt,80,40,450,150);
+    popStyle();
+};    
+var Door = function(x,y) {
+    this.x = x;
+    this.y = y + 18;
+    this.activated = false;
+    this.w = 30; this.h = 60;
+};    
+Door.prototype.draw = function() {
+    pushStyle();
+    strokeWeight(3);
+    stroke(182);
+    fill(223);
+    rect(this.x,this.y,30,60);
+    noStroke();
+    fill(196, 134, 33);
+    ellipse(this.x + 20, this.y + 30, 8,8);
+    popStyle();
+};
+Door.prototype.update = function() {
+    if(collide(plr,this)) {
+        Message("Press Space to Activate!");
+        if(keys[32]) {
+            lvl += 1;
+            objects.remove();
+            loadMap();
+            timeLeft = 60;
+        }    
+   }       
+};    
+var doors = [];
+doors.add = function(x,y) {
+    this.push(new Door(x,y));    
+};    
+doors.apply = function() {
+    doors.forEach(function(door) {
+        door.draw();
+        door.update();
+    });    
+};  
+var bullets = [];
+var addBullet = function(x,y,size,xVel,yVel,col) {
+    var b = {
+        x: x,
+        y: y,
+        size: size,
+        xVel: xVel,
+        yVel: yVel,
+        col: col
+    };
+    bullets.push(b);
+};
+var updateBullets = function() {
+
+    for (var i=bullets.length-1; i >= 0; i--) {
+        var b = bullets[i];
+        
+        if (b.x < -50 || b.x > 650 || b.y < -50 || b.y > 650) {
+            bullets.splice(i, 1);
+            
+        } else {
+            b.x += b.xVel;
+            b.y += b.yVel;
+            
+        }
+        //if(true){throw "kek";}
+    }
+};
+var drawBullets = function() {
+    for (var i = 0; i < bullets.length; i++) {
+        var b = bullets[i];
+        fill(b.col);
+        noStroke();
+        ellipse(b.x, b.y, b.size, b.size);
+    }
+};
+
+var Gun = function(x,y) {
+    this.x = x;
+    this.y = y;
+    this.w = 15;
+    this.h = 15;
+    this.pickedup = false;
+    this.delay = 5;
+    this.timer = 5;
+    this.reload = 10;
+    this.reloadTime = 0;
+    this.ammo = 10;
+    this.ableToShoot = true;
+};
+Gun.prototype.draw = function() {
+    pushMatrix();
+    translate(this.x+5,this.y);
+    
+    scale(0.2);
+    noStroke();
+    fill(64, 64, 64);
+    rect(-100, 0, 195, 8);
+    rect(95, -1, 27, 10);
+    rect(-100, 13, 217, 8);
+    rect(33, -4, 5, 3);
+    fill(54, 54, 54);
+    rect(58, 11, 1, 12);
+    rect(57, 12, 4, 10);
+    rect(52, 12, 4, 10);
+    rect(46, 12, 4, 10);
+    rect(40, 12, 4, 10);
+    
+    // barrel decorations
+    fill(18, 18, 18);
+    ellipse(108, -1, 13, 1);
+    ellipse(108, 2, 13, 1);
+    ellipse(108, 5, 13, 1);
+    ellipse(108, 8, 13, 1);
+    fill(97, 97, 97);
+    rect(-20, -2, 60, 21);
+    fill(84, 84, 84);
+    rect(-25, -2, 60, 27);
+    triangle(35, 15, 35, 25, 42, 20);
+    rect(35, 216, 7, 5);
+    fill(97, 97, 97);
+    triangle(25, 4, 35, 4, 35, 9);
+    fill(97, 97, 97);
+    rect(-20, -2, 60, 7);
+    stroke(51, 51, 51);
+    strokeWeight(2);
+    line(35, 11, 38, 11);
+    line(35, 14, 38, 14);
+    noStroke();
+    fill(0, 0, 0);
+    ellipse(30, 1, 10, 2);
+    ellipse(18, 1, 10, 2);
+    ellipse(6, 1, 10, 2);
+    
+    // pump action part decorations
+    strokeWeight(1);
+    stroke(94, 94, 94);
+    line(19, 7, 19, 21);
+    line(15, 7, 15, 21);
+    line(11, 7, 11, 21);
+    line(7, 7, 7, 21);
+    line(3, 7, 3, 21);
+    noStroke();
+    fill(71, 71, 71);
+    rect(-5, 24, 15, 3);
+    rect(-2, 26, 8, 30);
+    stroke(51, 51, 51);
+    strokeWeight(1);
+    line(-2, 34, 5, 34);
+    line(-2, 36, 5, 36);
+    line(-2, 38, 5,38);
+    line(-2, 40, 5, 40);
+    line(-2, 42, 5, 42);
+    line(-2, 44, 5, 44);
+    line(-2, 46, 5, 46);
+    line(-2, 48, 5, 48);
+    popMatrix();
+};
+Gun.prototype.update = function() {
+    if(this.pickedup) {
+        this.x = plr.x + plr.w;
+        this.y = plr.y;
+        if (this.ammo > 0) {
+            this.ableToShoot = true;
+        }
+        if (this.timer < this.delay) {
+            this.ableToShoot = false;
+        }
+        if (this.ammo <= 0) {
+            if (this.reloadTime >= this.reload) {
+                this.ammo = 0;
+                this.reloadTime = 0;
+            } else {
+                this.reloadTime++;
+            }
+        }
+        if (mouseIsClicked && this.ammo > 0 && this.ableToShoot === true) {
+            var cursorXDist = -(this.x) + mouseX;
+            var cursorYDist = -(this.y) + mouseY;
+            var magnitude = sqrt(sq(cursorXDist) + sq(cursorYDist));
+            addBullet(this.x+this.w,
+                this.y,
+                9,
+                cursorXDist / magnitude * 5,
+                cursorYDist / magnitude * 5,
+                color(0));
+        }
+    }
+    else { 
+        if(collide(plr,this)) {
+            this.pickedup = true;    
+        }
+    }    
+};
+var guns = [];
+guns.add = function(x,y) {
+    this.push(new Gun(x,y));    
+};
+guns.apply = function() {
+    guns.forEach(function(gun){gun.draw();gun.update();});   };
+var Guard = function() {
+    
+};
+var gameTxt = function(txt) { 
+    fill(0,0,0,gameTxtFade);
+    text(txt,300,300);
+    gameTxtFade++;
+};
+var levels = [
+    ['        ',
+     '       ',
+     '        ',
+     '        ',
+     '        ',
+     '        ',
+     '        ',
+     '        ',
+     '        ',
+     '        ',
+     '        ',
+     'P        ',
+     '              D',
+     '            ',
+     'bbbbb   bbbbbbb        '],
+     ['',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     'P    ddd      D',
+     '     bbb      ',
+     'bbb       bbbbbb'],
+     ['',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     'P             D',
+     '',
+     'bbbbbbbbbbbbbbbb'],
+     ['',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     '',
+     'P             D',
+     '     g',
+     'bbbbbbbbbbbbbbbb']];
+var gameMessages = ["You are a professional heister. Use the arrow keys to \n move. Get to the door.","Collect these diamonds to improve your funds. They are\nworth $100 each.", "Remember: You only have 60 seconds to complete each \nlevel.","Whoa! You found a gun! Go ahead and pick it up! Use the\n mouse to aim, and click to shoot."];
+objects = [doors,blocks,diamonds,guns];
+objects.remove = function() {
+    for (var i = 0; i < objects.length; i++) {
+        for (var j = 0; j < objects[i].length; j++) {
+            objects[i].splice(j, objects[i].length);
+        }
+    }
+};
+loadMap = function() {
+    for(var col=0; col<levels[lvl].length; col++){
+        for(var row=0; row<levels[lvl][col].length; row++){
+            var i = levels[lvl][col][row];
+            var ix = row * 40; var iy = col * 40;
+            switch(i) {
+                case "b" :
+                    blocks.add(ix,iy,40,40);
+                break;
+                case "P" :
+                    plr.x = ix; plr.y = iy;
+                break; 
+                case "d" :
+                    diamonds.add(ix,iy,30,30);
+                break;    
+                case "D" :
+                    doors.add(ix,iy);
+                break;    
+                case "g" :
+                    guns.add(ix,iy);
+                break;    
+            }    
+        }
+    }
+};    
+var getCurrentButtons = function() {
+    var buttons;
+    switch (scene) {
+        case 'splash':
+            buttons = drawLogo.buttons;
+            break;
+        case 'menu':
+            buttons = menuBtns;
+            break;
+    }
+    return buttons instanceof Array ? buttons : []; // make sure we're returning an array
+
+};
+mouseMoved = mouseOver = function() {
+    // find which button is beneath the mouse
+    var button = getCurrentButtons().find(function(button) {
+        return button.mouseIsOver;
+    });
+    // set cursor depending on what's beneath it
+    cursor(button ? HAND : ARROW);
+
+};
+
+mouseClicked = function() {
+    // find which button is beneath the mouse
+    var button = getCurrentButtons().find(function(button) {
+        return button.mouseIsOver;
+    });
+
+    if (button) {
+        // perform the action associated with the clicked button
+        button.onClick(button);
+    } 
+    mouseIsClicked = true;
+};
+var textRainbow = function(t, x, y, s, a, i) {
+    pushMatrix();
+    translate(x, y);
+    rotate(a);
+    textSize(s);
+    textAlign(CENTER, CENTER);
+    colorMode(HSB);
+    textFont(createFont("comic sans ms"));
+    fill(HeistC%255, 255, 255, i);
+    text(t, 0, 0);
+    popMatrix();
+    colorMode(RGB);
+};
+loadMap();
+var draw = function() {
+    frames++;
+    if (scene === 'splash') {
+        drawLogo();
+        if (drawLogo()) {
+            changeScene('menu');
+        }
+    } else if (scene === 'menu') {
+        background(255);
+        textRainbow("HEIST",300,150,150+sin(frameCount*10)*10,sin(frameCount*5)*10);
+        menuBtns.forEach(function(btn) {btn.draw();});
+        HeistC++;
+    } else if(scene === 'game') {
+        background(255);
+        fill(0);
+        if(lvl >= 1) {
+            text("Funds: $" + plr.funds,300,20);
+        }
+        if(lvl >= 2) {
+            text("Time Left: " + timeLeft,70,20);
+            timeCnt++;
+            if(timeCnt >= 100) {
+                timeCnt = 0;
+                //timeLeft -= 1;
+            }
+            if(timeLeft <= 0) {
+                timeLeft = 60;
+                objects.remove();
+                loadMap();
+            }
+        }    
+        gameTxt(gameMessages[lvl]);
+        diamonds.apply();
+        blocks.apply();
+        doors.apply();
+        plr.draw();
+        plr.update(blocks);
+        drawBullets();
+        updateBullets();
+        guns.apply();
+    }     
+    mouseIsClicked = false;
+};
+keyPressed = function() {
+    keys[keyCode] = true;
+};
+keyReleased = function() {
+    keys[keyCode] = false;
+};
