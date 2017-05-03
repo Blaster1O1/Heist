@@ -1,416 +1,586 @@
-var shift = 0;
-var alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-var playerCanMove = true;
+/**
+ ****This game is a variant of the game right here: http://thesimplearcade.com/play/avalanche.html****
+ ****MUST HAVE SPIN-OFF TO SHOW PROOF OF HIGH SCORE! ONE HIGH-SCORE PER PERSON****
+     Thanks to Mr. Sparkle for Sparkled Graphics! (https://www.khanacademy.org/computer-programming/sparkled-graphics-free-for-umar-to-use/5237898645209088)
+     Thanks for 40 votes and third on the hot list!
+    @CREDITS
+        *Credit to @ThomasL for Platformer Example (which helped me A LOT with platform collisions)!
+        * Credit to @Splo, @BlueLeaf, and @TimothySmith for logo (Splo for the original, Blue leaf for adding the fire particles, and the fire particle was adapted from Timothy Smith)
+        * Confetti from here: Confetti(From here:https://www.khanacademy.org/computer-programming/confetti/1284389972)
+    @UPDATELOG
+        *Added warning sign before the block falls
+        * Imported sparkled graphics from Mr. Sparkle
+        * Fixed collisions(I hope)
+        * Fixed averaging
+        * Probably won't update much anymore... i may get to you though.
+        * Updated all high scores; 99% chance this is the last update
+*/
+{
+{
+var keys=[];
+var keyDelay = 0;
+var keyPressed=function() {keys[keyCode]=true;}; 
+var keyReleased=function(){keys[keyCode]=false;};
+}//Handles key events
+
+{
+var LAVA_SPEED = 0.2;
+var currentScene = "Logo";//Game State
 var frames = 0;
-var keys = [];
-var scene = 'splash';
-var HeistC = 0;
-var gameTxtFade = 0;
-var lvl = 3;
-var loadMap;
-var objects;
-var timeLeft = 60;
-var timeCnt = 0;
-var cursorVisible = true;
+var Block;
+var platforms = [];//Platforms
 var mouseIsClicked = false;
-var collide = function(o1,o2) {
-    return o1.x < o2.x + o2.w &&
-   o1.x + o1.w > o2.x &&
-   o1.y < o2.y + o2.h &&
-   o1.h + o1.y > o2.y;
-};    
-var changeScene = function(newScene) {
-        scene = newScene;
-        frames = 1;
-};        
-var setConfig = function(obj, config) {
+var highScores = [];
+var gameTrans = 255;
+var scoreToBeat = 663;
+var WinningScore = 1046;
+var R = 82;
+var W = 87;
+var A = 65;
+var D = 68;
+var T = 84;
+var score = 0;
+var loseTimer = 0;
+var Lose_Text = '';
+var lavaY = 10420;
+var lavaH = 0;
+var DeathTimer = 0;
+var deb = false;
+var paused = false;
+var bestScore = 0;
+var gamesPlayed = 0;
+var newBest = false;
+var totalScore = 0;
+var menuMessages = ["The creator's best score was 457! :P","To get on the high score list, you need to get at least "+(scoreToBeat+1),"The best score is by Daba, scoring a whopping 1046 points!","Psst... Here's a winning secret... Try again and again!","If you don't know how to play, visit the tutorial!","Did you play the bonus level yet?"];
+var msg = round(random(0,4));
+}//Variables
+var override = function(obj, config) {
     for (var propertyName in config) {
         obj[propertyName] = config[propertyName];
     }
-}; //Override some properties
-var exactDistance = function(x1, y1, x2, y2) {
-    return sqrt(abs((x2 - x1) * (x2 - x1)) + abs((y1 - y2) * (y1 - y2)));
 };
-var fonts = {
-    // All the fonts used in the program - defined here so they're only created once 
-    arial: createFont('Arial'),
-    arialBoldItalic: createFont('Ari  al Bold Italic'),
-    chalkboard: createFont('Chalkboard'),
-    sans: createFont('sans-serif'),
-    serif: createFont('serif'),
-    tahoma: createFont('Tahoma'),
-    times: createFont('Times'),
-    verdana: createFont('Verdana'),
-    avenir: createFont('avenir'),
-    monospace: createFont('monospace'),
-    oribtron: createFont('Orbitron'),
-    tooltip: createFont('Verdana', 12),
-};
-var mouse = {
-
-    get x() {
-        return mouseX;
-    },
-    get y() {
-        return mouseY;
-    },
-
-    // return `true` if the mouse is inside the defined rectangle/square
-    isInRect: function(left, top, width, height) {
-        // if `height` is not passed, assume a square with all sides of length `width`
-        if (arguments.length < 4) {
-            height = width;
-        }
-        return this.x >= left &&
-            this.x < left + width &&
-            this.y >= top &&
-            this.y < top + height;
-    },
-
-    // return `true` if the mouse is inside the defined ellipse/circle
-    isInEllipse: function(centerX, centerY, width, height) {
-        // if `height` is not passed, assume a circle with a diameter of `width`
-        if (arguments.length < 4) {
-            height = width;
-        }
-        return sq((this.x - centerX) / (width / 2)) + sq((this.y - centerY) / (height / 2)) <= 1;
-    }
-}; {
-    var textType = { // indicates the kind of data accepted into a `Textbox` object
-
-        DIGITS: /\d/, // digits (0..9)
-        ALPHA: /[a-z]/i, // letters, case insensitive
-        ALPHANUMERIC: /[a-z\d]/i, // letters and digits, case insensitive
-        ANYTHING: /[ -~]/ // anything from space to tilde (' '..'~')
-    };
-
-    var Textbox = function(owner, left, top, width, height, textType, maxChars, caption, config) {
-        this.owner = owner; // object that owns this textbox.
-
-        this.left = left; // location of textbox & selection area for mouse.
-        this.top = top;
-        this.width = width;
-        this.height = height;
-
-        this.validRegExp = textType; // RegExp of acceptable characters
-        this.maxChars = maxChars; // not more than `maxChars` characters will be allowed
-        { // object defaults - may be overridden by 'config' parameter
-            this.xAlign = LEFT; // only valid values are `LEFT` and `CENTER`.  Currently no support for `RIGHT`
-            this.caption = caption; // caption that will be drawn to the left of the textbox
-            this.text = ''; // starting value
-            this.isVisible = true; // allow button to be shown/drawn
-            this.isEnabled = true; // allow button to be selected and typed-into
-            this.foreColor = color(0);
-            this.font = fonts.serif;
-            this.fontSize = 26;
-            this.captionColor = this.foreColor;
-            this.captionFont = this.font;
-            this.captionFontSize = this.fontSize;
-
-            this.enterEqualsTab = true; // When multiple textboxes exist, pressing `ENTER` tabs to the next textbox
-        }
-        setConfig(this, config); // override default properties
-    };
-    Object.defineProperty(Textbox.prototype, 'mouseIsOver', {
-        get: function() {
-            return this.isEnabled && this.isVisible && mouse.isInRect(this.left, this.top, this.width, this.height);
-        }
-    });
-
-    Textbox.prototype.draw = function() {
-        if (!this.isVisible) {
-            return;
-        }
-
-        // caption
-
-        if (this.caption && this.captionColor && this.captionFont && this.captionFontSize) {
-            textAlign(RIGHT, CENTER);
-            textFont(this.captionFont, this.captionFontSize);
-            fill(this.captionColor);
-            text(this.caption, this.left, this.top + this.height / 2);
-        }
-
-        // text
-
-        // is this the "current textbox"?
-        var isCurrent = this.owner && this.owner.textboxes && this.owner.textboxes[this.owner.textIndex] === this;
-        textAlign(this.xAlign, CENTER);
-        textFont(this.font, this.fontSize);
-        fill(this.foreColor);
-        // append a blinking "cursor" & to "current textbox"
-        text(this.text + (isCurrent && frameCount % 60 < 30 ? '|' : ' '),
-            this.xAlign === LEFT ? this.left : this.left + this.width / 2,
-            this.top + this.height / 2);
-    };
-} // textType & Textbox
-var tooltip = {
-    x: undefined,
-    y: undefined,
-    w: undefined,
-    h: undefined,
-    txt: undefined,
-    time: 0,
-    isVisible: false,
-    draw: function() {
-        if (this.isVisible) {
-            stroke(0, 0, 0);
-            fill(255, 255, 0, 210);
-            rect(this.x, this.y, this.w, this.h);
-            fill(0, 0, 0, 225);
-            text(this.txt, this.x + 5, this.y + 5);
-        }
-
-    },
-    update: function() {
-        if (mouse.isInRect(this.x, this.y, this.w, this.h)) {
-            this.time++;
-        } else {
-            this.time = 0;
-        }
-        if (this.time >= 70) {
-            this.isVisible = true;
-        }
-    }
-}; //Tooltip
-
-{ //Button
-    var buttonShape = { // possible shapes of a button
-        RECTANGLE: 0,
-        ELLIPSE: 1
-    };
-    var Button = function(x, y, width, height, caption, onClick, config) {
-        // If button's shape is ELLIPSE, (x,y) are the center coordinates.
-        // If button's shape is RECTANGLE, (x,y) are the top/left coordinates.
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
-        this.caption = caption;
-        this.onClick = typeof onClick === 'function' ? onClick : function() {}; { // object defaults - may be overridden by 'config' parameter
-            this.isVisible = true; // allow button to be shown/drawn
-            this.isEnabled = true; // allow button to be clicked
-            this.shape = buttonShape.RECTANGLE;
-            this.toolTipText = this.caption;
-            this.borderSize = 1; // the stroke weight of the button's border
-            this.radius = this.height / 4; // only valid for `RECTANGLE` shaped buttons
-            // if a certain color is not wanted (e.g., no border), use `undefined` as the color value
-            this.backColor = color(181); // the fill color of the button's shape
-            this.borderColor = color(255, 255, 255); // the stroke color of the button's shape
-            this.foreColor = color(0); // the color of the caption
-            this.inverseOnMouseOver = true; // draw using 'inverse' colors when mouse is over button
-            this.inverseBackColor = color(255, 0, 0);
-            this.inverseBorderColor = color(255, 0, 0);
-            this.inverseForeColor = this.foreColor;
-            this.inverseBorderSize = this.borderSize + 2;
-            this.font = fonts.chalkboard;
-            this.fontSize = 22;
-            this.time = 0;
-        }
-        setConfig(this, config); // override default properties
-    };
-
-    Object.defineProperty(Button.prototype, 'mouseIsOver', {
-
-        get: function() {
-            return this.isEnabled && this.isVisible &&
-                (this.shape === buttonShape.RECTANGLE ?
-                    mouse.isInRect(this.x, this.y, this.width, this.height) :
-                    mouse.isInEllipse(this.x, this.y, this.width, this.height));
-
-        }
-
-    });
-
-    Button.prototype.draw = function() {
-        if (!this.isVisible) {
-            return;
-        }
-        var useInverse = this.inverseOnMouseOver && this.mouseIsOver;
-        var backColor = useInverse ? this.inverseBackColor : this.backColor;
-        var borderColor = useInverse ? this.inverseBorderColor : this.borderColor;
-        var foreColor = useInverse ? this.inverseForeColor : this.foreColor;
-        var borderSize = useInverse ? this.inverseBorderSize : this.borderSize;
-        tooltip.txt = this.toolTipText;
-        tooltip.x = this.x + 5;
-        tooltip.y = this.y + 6;
-        tooltip.w = 30;
-        tooltip.h = 10;
-        if (borderColor && borderSize) {
-
-            strokeWeight(borderSize);
-            stroke(borderColor);
-        } else {
-            noStroke();
-        }
-        if (backColor) {
-            fill(backColor);
-        } else {
-            noFill();
-        }
-        if (this.shape === buttonShape.RECTANGLE) {
-            rect(this.x, this.y, this.width, this.height, this.radius);
-        } else {
-            ellipse(this.x, this.y, this.width, this.height);
-        }
-
-        if (this.caption !== undefined && this.caption !== '' && foreColor !== undefined && this.font && this.fontSize > 0) {
-            var centerX = this.shape === buttonShape.RECTANGLE ? this.x + this.width / 2 : this.x;
-            var centerY = this.shape === buttonShape.RECTANGLE ? this.y + this.height / 2 : this.y;
-            fill(foreColor);
-            textFont(this.font, this.fontSize);
-            textAlign(CENTER, CENTER);
-            text(this.caption, centerX, centerY);
-        }
-    };
-
-}
-
-var menuBtns = [
-  new Button(300, 300, 60, 60, "PLAY", function() {changeScene('game');}, {shape: buttonShape.ELLIPSE}) 
-]; {
-    var FireParticle = function(x, y, life, speed, maxLife) {
-        this.x = x;
-        this.y = y;
-        this.life = life;
-        this.speed = speed;
-        this.maxLife = maxLife;
-    };
-
-    FireParticle.prototype.draw = function() {
-        var factor = (this.life--) / this.maxLife;
-        fill(255, factor * 255, sin(factor * 20) * 255, factor * 255); // Reduce the 28 to get more yellow/orange in the flame
-        ellipse(this.x, this.y, 25, random(20)); // Increase 18 to change the density/blur of the fire trail - try 25 or 30!
-        this.x -= this.speed;
-    };
-
-    var fire = {
-        maxLife: 40,
-        x: 200,
-        y: 400,
-        height: 30,
-        particles: [],
-        t: 0,
-        draw: function() {
-            this.t += 0.03;
-            var val;
-            for (var i = 0; i < this.height / 3.2; i++) { // lower 2.2 to get a higher particle density (may cause lag)
-                val = random(-90, 90);
-                var y = this.y - sin(val) * this.height / 2;
-                var x = this.x + cos(val) * this.height / 4;
-                val = noise(y / 100, this.t, 0);
-                var life = this.maxLife * (0.8 * (1 - abs((this.y - y) / this.height * 2)) + val - 0.3); // Reduce the 0.3 to get a denser flame (may cause lag)
-                var speed = val * random(3, 5) + 4; // Increase 4 to increase tail length & the appearance of speed
-                this.particles.push(new FireParticle(x + random(0, this.height / 4), y, life, speed, this.maxLife));
-            }
-            val = map(noise(this.t / 20, 0, 0), 0, 1, -3, 3); // -3, 3 are the limits of up & down tail "wag"
-            noStroke();
-            for (var i = this.particles.length - 1; i >= 0; i--) {
-                this.particles[i].draw();
-                this.particles[i].y += val;
-                if (this.particles[i].life <= 0) {
-                    this.particles.splice(i, 1);
-                }
-            }
-        }
-    };
-} // FireParticle & fire
-var shadowText = function(txt, x, y, textColor, shadowColor, offSet, txtSize) {
-    this.txt = txt;
+{
+var Button = function(x, y, width, height, txt, onClick, config) {
     this.x = x;
     this.y = y;
-    this.offSet = offSet;
-    this.txtSize = txtSize;
-
-    this.textColor = textColor;
-    this.shadowColor = shadowColor;
-
-    textAlign(CENTER);
-    textSize(this.txtSize);
-    fill(this.shadowColor);
-    text(this.txt, (this.x + this.offSet), (this.y + this.offSet));
-    fill(this.textColor);
-    text(this.txt, this.x, this.y);
-}; //By awk
-
-var selfTypingText = function(t, x, y, color, speed, delay, depth) {
-    //by Knowledge
-    if (depth) {
-        fill(0, 0, 0);
-        text(t.substring(0, floor(frameCount / speed) - delay), x - 1, y - 2, width, height);
+    this.w = width;
+    this.h = height;
+    this.txt = txt;
+    if(typeof onClick === 'function') {
+        this.onClick = onClick;    
+    } else {
+        throw {message: "No on click defined!"};    
     }
-    fill(color);
-    text(t.substring(0, floor(frameCount / speed) - delay), x, y, width, height);
+    {  
+        this.visible = true;  
+        this.enabled = true;  
+        this.shape = 1;
+        this.borderThickness = [1,3];  
+        this.radius = this.h / 4;  
+        this.backColor = color(181);  // Background color
+        this.borderColor = color(255, 0, 0);  
+        this.textColor = color(0);  
+        this.otherOnMouseOver = true;  
+        this.otherBackColor = color(255, 0, 0);
+        this.otherBorderColor = color(255);
+        this.othertextColor = this.textColor;
+        this.otherborderThickness = this.borderThickness + 2;
+        this.font = createFont("Chalkboard");
+        this.fontSize = 22;
+    }
+    override(this, config);  
 };
+
+Object.defineProperty(Button.prototype, 'mouseIsOver', {
+    
+    get: function() {
+        return this.enabled && this.visible &&
+                (this.shape === 1 ?
+                 (mouseX >= this.x && mouseX <= this.x + this.w && mouseY >= this.y && mouseY <= this.y + this.h) : (dist(this.x,this.y,mouseX,mouseY) < this.w/2));
+                 
+                  
+    }
+   
+});
+
+Button.prototype.draw = function() {
+    if (!this.visible) { return; }
+    var useother = this.otherOnMouseOver && this.mouseIsOver;
+    var backColor = useother ? this.otherBackColor : this.backColor;
+    var borderColor = useother ? this.otherBorderColor : this.borderColor;
+    var textColor = useother ? this.othertextColor : this.textColor;
+    var borderThickness = useother ? this.otherborderThickness : this.borderThickness;
+        strokeWeight(borderThickness);
+        stroke(borderColor);
+        fill(backColor);
+    if(this.mouseIsOver) {
+        cursor(HAND);
+        
+        if(mouseIsClicked) {
+            this.onClick();    
+        }
+    }  
+    if (this.shape === 1) {
+        rect(this.x, this.y, this.w, this.h, this.radius);
+    } else {
+        ellipse(this.x, this.y, this.w, this.h);
+    }
+    
+        var centerX = this.shape === 1 ? this.x + this.w / 2 : this.x;
+        var centerY = this.shape === 1 ? this.y + this.h/ 2 : this.y;
+        fill(textColor);
+        textFont(this.font, this.fontSize);
+        if(this.mouseIsOver) {
+            centerY += sin(frameCount * 5) * this.h / 10;
+        }
+        textAlign(CENTER, CENTER);
+        text(this.txt, centerX, centerY);
+};
+}//Button functions
+
+var drawPlayer = function(x,y,state) {
+    pushStyle();
+    pushMatrix();
+    translate(x,y);
+    if(state === "Jump") {
+        pushMatrix();
+        scale(0.15);
+        translate(-120,-70);
+        beginShape();
+        vertex(260, 287);
+        vertex(103, 286);
+        vertex(125, 198);
+        vertex(96, 96);
+        vertex(253, 97);
+        vertex(279, 200);
+        endShape(CLOSE);
+        popMatrix();//Jumping
+    } else if(state === "Stand"){
+        rect(0,0,30,30);    //Standing
+    } else if(state === "Right") {
+        pushMatrix();
+        scale(0.2);
+        translate(-50,-120);
+        beginShape();
+        vertex(233, 276);
+        vertex(129, 271);
+        vertex(152, 136);
+        vertex(267, 139);
+        endShape(CLOSE);     
+        popMatrix(); //Moving Right
+    } else {
+        pushMatrix();
+        translate(-50,-23);
+        scale(0.2);
+        beginShape();
+        vertex(232, 266);
+        vertex(129, 271);
+        vertex(100, 132);
+        vertex(205, 126);
+        endShape(CLOSE);    
+        popMatrix();    
+    }//Moving Left
+    popMatrix();
+    popStyle();
+};//Draw player
+
+var distance = function(n1,n2) {
+  return abs(n2-n1);  
+};//Distance Formula
+
+var collide=function(x,y,w,h,hit){ 
+   return x < hit.x + hit.w &&
+   x + w > hit.x &&
+   y < hit.y + hit.h &&
+   h + y > hit.y;
+};//Collision detection(rectangle to rectangle)
+
+var player = {
+  x: 400,
+  y:10170,
+  w: 30,
+  h:30,
+  state: "Stand",
+  dead: false,//Dead or not
+  vel: new PVector(4,4),//Velocity
+  falling: true,
+  gravity: 0.4,
+  jumpPower: 9,//Jump Height/Power
+  spd: 1,//Movement speed 3:
+  color:color(183, 0, 255),
+  draw:function() {
+     if(this.dead) {return;}
+     fill(this.color);
+     drawPlayer(this.x,this.y,this.state); 
+  },//Draws the player
+  update:function(p) {
+      if(this.dead) {return;}
+    if(keys[LEFT] || keys[A]) { 
+        this.vel.x -= this.spd; 
+        this.state = "Left";
+    }
+    if(currentScene === "Game") {
+    if(this.x >= 736) {
+        this.x = 140;     
+    }
+    if(this.x < 130) {
+        this.x = 700;    
+    }
+    }
+    if(keys[RIGHT] || keys[D] ) { 
+        this.vel.x += this.spd; 
+        this.state = "Right";
+    }
+    
+    if((keys[UP] || keys[W]) && !this.falling) {
+        this.vel.y = -this.jumpPower;
+        this.falling = true;
+        this.state = "Jump";
+    }
+    if(!keys[UP] && !keys[W] && !keys[D] &&  !keys[A] && !keys[LEFT] && !keys[RIGHT]) {
+        this.state = "Stand";    
+    }
+    if(!keys[LEFT] && !keys[RIGHT] && !keys[A] && !keys[D]) {
+            if(this.vel.x>0) {
+                this.vel.x -= this.spd;
+            }
+            if(this.vel.x<0) {
+                this.vel.x += this.spd;
+            }
+            /*A quick fix to stop player from
+                moving in a single direction.*/
+            if(this.vel.x<0.1&&this.vel.x>0){this.vel.x=0;}
+            if(this.vel.x>-0.1&&this.vel.x<0){this.vel.x=0;}
+    }
+    this.vel.y += this.gravity;
+    if(this.vel.x > 5) {
+        this.vel.x = 5;    
+    }
+    if(this.vel.x < -5) {
+        this.vel.x = -5;
+    }
+    if(this.vel.y > 10) {
+        this.vel.y = 10;
+    }
+    this.x += this.vel.x;
+    this.collideWith(this.vel.x,0,p);
+    this.y += this.vel.y;
+    this.collideWith(0,this.vel.y,p);
+  },
+  collideWith: function(xv,yv,platforms) {
+    for (var i in platforms) {      
+            var p = platforms[i];
+                if( this.y+this.h > p.y &&
+                    this.y        < p.y+p.h &&
+                    this.x+this.w > p.x &&
+                    this.x        < p.x+p.w)
+                {
+                if(p instanceof Block) {    
+                  this.state = "Stand"; 
+                }  
+                    // BOTTOM
+                    if(yv>0) {
+                        this.vel.y = 0;
+                        this.falling = false;
+                        this.y = p.y-this.h;
+                    }
+                    
+                    if (yv < 0) {
+                        this.yvel = 0;
+                        this.falling = true;
+                        this.y = p.y + p.h;
+                    }
+                    // RIGHT
+                    if(xv>0) {
+                        this.vel.x = 0;
+                        this.x = p.x-this.w;
+                    }
+                    // LEFT
+                    if(xv<0) {
+                        this.vel.x = 0;
+                        this.x = p.x+p.w;
+                    }
+            }    
+        }
+  }//Platform collisions    
+};//Player functions
+
+var platform = {
+    x:0, y: 10270,
+    w:1000000, h:50,
+    color: color(255,0,0),
+    draw: function() {
+        fill(this.color);
+        rect(this.x,this.y,this.w,this.h);
+    }
+};//Platform at the bottom
+
+{
+var flakes = [];
+var flakeSpawn = function(){
+    flakes.push({
+        x: random(0,width),
+        y: -100,
+        z: random(1,3),
+        color: color(random(0,255),random(0,255),random(0,255))
+    });
+};
+var confettiBK = function() {
+    background(255,255,0);
+    flakeSpawn();
+    for(var i = 0; i < flakes.length; i ++){
+        stroke(flakes[i].color);
+        strokeWeight(10/flakes[i].z);
+        point((flakes[i].x - (width/2))/flakes[i].z + (width/2),(flakes[i].y - (height/2) - i * 3)/flakes[i].z + (height/2));
+        flakes[i].y+=6;
+    }
+    for(var i in flakes) {
+        if(flakes[i] >= 600) {
+            flakes.splice(i,1);    
+        }
+    }    
+};    
+}//Confetti(From here:https://www.khanacademy.org/computer-programming/confetti/1284389972)
+
+var scrollX=200; var scrollY=200;
+var scroll=function(x,y){
+    translate(x,y); 
+};//Scrolling
+{
+var particles = [];
+var runParticles = function() {
+    for(var i in particles) {
+        var p = particles[i];
+        p.velocity.add(p.acceleration);
+        p.position.add(p.velocity);
+        p.timeToLive -= 2;  
+        stroke(255, 255, 255, p.timeToLive);
+        strokeWeight(2);
+        fill(186, 171, 186,p.timeToLive);
+        ellipse(p.position.x, p.position.y, 12, 12);
+        if(p.timeToLive === 0) {
+            particles.splice(i,1);    
+        }
+    }
+};//Runs the particles
+}//Particles(ran when player dies)
+
+{
+    
+var Eye = function(targetX,targetY,centerX, centerY, eyeSize, pupilSize)
+{
+    noStroke();
+    
+    //Determine the vector between two points, alowing the pupil to move in circular rotation
+    var vectorX = (targetX-centerX); //calculates x component of vector
+    var vectorY = (targetY-centerY); //calculates y component of vector
+    var length = sqrt((vectorX * vectorX) + (vectorY * vectorY));
+    
+    //calculate the length, by using the Pythagorean Theorem
+    var pupilDisplacement = ((eyeSize / 2) - pupilSize); 
+    
+    //calculate the unit vector
+    vectorX /= length;
+    vectorY /= length;
+    
+    //White of the eyes
+    fill(255, 255, 255);
+    
+    //Main whites of the eye
+    noStroke();
+    ellipse(centerX, centerY, eyeSize, eyeSize);
+
+        //The Main Circular rotation of the pupil
+    fill(0, 0, 0);
+    ellipse(centerX + (vectorX*pupilDisplacement), 
+    centerY + (vectorY*pupilDisplacement), 
+    pupilSize*2, pupilSize*2);
+};
+var Block = function(x,y,s,c) {
+    this.x = x;
+    this.y = y;
+    this.falling = true;
+    this.w = s;
+    this.h = this.w;
+    this.trans = 255;
+    this.color = c;
+    this.yvel = 0;
+    this.gravity = 0.4;
+    this.timer = 0;
+};
+Block.prototype.draw = function() {
+    fill(this.color);
+    noStroke();
+    rect(this.x,this.y,this.w,this.h);
+    pushStyle();
+    Eye(player.x,player.y,this.x+this.w/2,this.y+this.h/2, this.w/2, this.w/6);
+    popStyle();
+};
+Block.prototype.update = function() {
+    if(this.timer < 40) {
+        pushMatrix();
+        translate(this.x,-1*(200-player.y));
+        fill(255, 0, 0);
+        rect(0,0,40,40);
+        fill(255,255,0);
+        textSize(this.timer % 5 === 0?40:35);
+        text("!",20,20);
+        popMatrix();
+    } else {
+        this.y += this.yvel;  
+        this.collideWith(0,this.yvel,platforms); 
+        this.yvel += this.gravity;
+        if(collide(this.x + 1, this.y + this.h/2, this.w - 1,this.h-10,player) && this.falling === true) {
+            player.dead = true;
+        }//Kills the player
+    }
+    this.timer++;
+};
+Block.prototype.collideWith = function(xv, yv, platforms) {
+        for (var i = 0; i < platforms.length; i++) {
+            var p = platforms[i];
+            if (collide(this.x,this.y,this.w,this.h,p)&&(p.x!==this.x||p.y!==this.y)) {
+       
+                // BOTTOM
+                if (yv > 0) {
+                    this.yvel = 0;
+                    this.falling = false;
+                    this.y = p.y - this.h;
+                }
+                // TOP
+                if (yv < 0) {
+                    this.yvel = 0;
+                    this.falling = true;
+                    this.y = p.y + p.h;
+                }
+               
+            }
+        }
+    };
+}//Block functions
+platforms.push(platform);
+var tutorialPlatforms = [];
+tutorialPlatforms.push(platform);
+var scoreboard = {
+    score: 21,
+    board: function() {
+        fill(255, 0, 0);
+        textFont(createFont("Chalkboard"),40);
+        text(round(this.score),151,-170);
+        text(round(distance(player.y,platform.y)/3),154,-130);
+    },
+    update: function() {
+        if(distance(player.y,platform.y)/3 > this.score) {
+        this.score = distance(player.y,platform.y)/3;
+        }
+    },//Updates the Max Distance Traveled 
+    resetS: function() {
+        this.score = 21;    
+    }
+};//Scoreboard
+{
+{
+var FireParticle = function(x, y, life, speed, maxLife) {
+    this.x = x;
+    this.y = y;
+    this.life = life;
+    this.speed = speed;
+    this.maxLife = maxLife;
+};
+
+FireParticle.prototype.draw = function() {
+    var factor = (this.life--) / this.maxLife;
+    fill(255, factor * 255, sin(factor * 20) * 255, factor * 255);  // Reduce the 28 to get more yellow/orange in the flame
+    ellipse(this.x, this.y, 25, random(20));  // Increase 18 to change the density/blur of the fire trail - try 25 or 30!
+    this.x -= this.speed;
+};
+
+var fire = {
+    maxLife: 40,
+    x: 200,
+    y: 400,
+    height: 30,
+    particles: [],
+    t: 0,
+    draw: function() {
+        this.t += 0.03;
+        var val;
+        for (var i = 0; i < this.height / 3.2; i++) { // lower 2.2 to get a higher particle density (may cause lag)
+            val = random(-90, 90);
+            var y = this.y - sin(val) * this.height / 2;
+            var x = this.x + cos(val) * this.height / 4;
+            val = noise(y / 100, this.t, 0);
+            var life = this.maxLife * (0.8 * (1 - abs((this.y - y) / this.height * 2)) + val - 0.3); // Reduce the 0.3 to get a denser flame (may cause lag)
+            var speed = val * random(3, 5) + 4;  // Increase 4 to increase tail length & the appearance of speed
+            this.particles.push(new FireParticle(x + random(0, this.height / 4), y, life, speed, this.maxLife));
+        }
+        val = map(noise(this.t / 20, 0, 0), 0, 1, -3, 3); // -3, 3 are the limits of up & down tail "wag"
+        noStroke();
+        for (var i = this.particles.length - 1; i >= 0; i--) {
+            this.particles[i].draw();
+            this.particles[i].y += val;
+            if (this.particles[i].life <= 0) { this.particles.splice(i, 1); }
+        }
+    }
+};//Fire
 // return `true` when it's time to leave the splash screen
+{
+var logoDismissed = false;  
+var skip = new Button(1, 560, 80, 30, 'Skip', function() { logoDismissed = true; });
+var stars = [];
+var logoPos = 400;
+}//Logo variables
 var drawLogo = function() {
-    // does this function need to be initialized?
-    if (!drawLogo.initialized) {
-        drawLogo.startTime = millis(); // used for timimg the animation & duration of the splash screen
-        drawLogo.dismiss = false; // this will become `true` when it's time to leave the splash screen
-        drawLogo.buttons = [
-            new Button(1, 560, 80, 30, 'Skip', function() {
-                drawLogo.dismiss = true;
-            })
-        ];
-        drawLogo.pos = 400;
-        drawLogo.stars = [];
-        drawLogo.initialized = true;
+    logoPos /= 1.2;
+    pushMatrix();
+    scale(width/400,height/400);
+    if (stars.length < 30) {
+        stars.push({x: random(0, 400),
+                             y: random(0, 400),
+                             life: floor(random(40, 160)),
+                             size: random(1, 3)});
     }
-
-    drawLogo.pos /= 1.2;
-    if (drawLogo.stars.length < 30) {
-        drawLogo.stars.push({
-            x: random(0, 600),
-            y: random(0, 600),
-            life: floor(random(40, 160)),
-            size: random(1, 3)
-        });
-    }
-
     // After 400 frames (~6.7 seconds), the splash screen will be dismissed - unless it's already been dismissed via the "skip" button
-    drawLogo.dismiss = drawLogo.dismiss || (frames >= 400);
+    logoDismissed = logoDismissed || (frames >= 400);
 
-    background(17, 17, 36); // "midnight blue"
-
+    background(17, 17, 36);  // "midnight blue"
+    
     // stars
     noFill();
-    drawLogo.stars.forEach(function(star, i, stars) {
+    stars.forEach(function(star, i, stars) {
         (stroke)(255, map(star.life, 0, 80, 0, 255));
         strokeWeight(star.size);
         point(star.x, star.y);
-        if (--star.life <= 0) {
-            stars.splice(i, 1);
-        }
+        if (--star.life <= 0) { stars.splice(i, 1); }
     });
-
+    
     // "Startech"
     noStroke();
     fill(192);
     textAlign(CENTER, CENTER);
-    textFont(fonts.tahoma, 96);
-    text("S", 165 + drawLogo.pos, 250);
+    textFont(createFont("Tahoma"), 96);
+    text("S", 65 + logoPos, 200);
     textSize(64);
-    text('TARTECH', 325 + drawLogo.pos, 260);
-
+    text('TARTECH', 225 + logoPos, 210);
+    
     // "burning" square
-    for (var x = 0; x < 4; x++) {
-        for (var y = 0; y < 4; y++) {
+    for (var x = 0; x < 4; x ++) {
+        for (var y = 0; y < 4; y ++) {
             fill(242, y * 64 + sin(x * 140 + frames * 10) * 64, 0, y * 128 + 64);
-            ellipse(x * 5 + 115 + drawLogo.pos, y * 5 + 215 + drawLogo.pos, 5, 5);
+            ellipse(x * 5 + 45 + logoPos, y * 5 + 145 + logoPos, 5, 5);
         }
     }
-
+    
     // "Infinity" sphere
     fill(255, 255, 128, 32);
-    ellipse(300 + sin(frames) * 100, 300 + sin(frames * 2) * 50 + drawLogo.pos, 120, 120);
+    ellipse(200 + sin(frames) * 100, 200 + sin(frames * 2) * 50 + logoPos, 120, 120);
 
     // Fireball
     var y = constrain(map(frames, 0, 180, 200, 100), 100, 200); // Change 100s to move star's final y-position
     var x = constrain(map(frames, 0, 180, -30, 280), -30, 280); // Change 280s to move star's final x-position
     noStroke();
     for (var d = 30; d > 0; d -= 2) {
-        fill(lerpColor(color(255, 0, 0), color(255, 255, 0), d / 30));
+        fill(lerpColor(color(255, 0, 0), color(255, 255, 0), d/30));
         ellipse(x, y, d, d);
     }
     fire.x = x;
@@ -419,661 +589,456 @@ var drawLogo = function() {
 
     // "Presents..." & motto
     fill(255, 255, 255, map(frames, 200, 300, 0, 255));
-    textFont(fonts.arial, 38);
-    text("Presents...", 293 + drawLogo.pos, 560);
-    selfTypingText("Our motto: Create the best, or nothing.", 0, 69, color(255), 4, 7, false);
-
-    // draw buttons
-    drawLogo.buttons.forEach(function(button) {
-        button.draw();
-    });
-    return drawLogo.dismiss;
-};
-var plr = {
-    x: 0, y: 0,
-    w: 20, h: 20,
-    score: 0,
-    xvel: 0,
-    yvel: 0,
-    funds: 0,
-    falling: true,
-    gravity: 0.4,
-    jumpHeight: 9,
-    maxFallSpeed : 12,
-    moveSpeed: 0.5,
-    maxMoveSpeed: 5,
-    direction: "",
-    update: function(platforms) {
-       // println(this.direction);
-        /* Player Events */
-        if(playerCanMove){if(keys[LEFT]) { this.xvel -= this.moveSpeed; this.direction = "left"; }
-        if(keys[RIGHT]){ this.xvel += this.moveSpeed; this.direction = "right"; }
-           if(this.y >= 600) {
-                loadMap();
-                gameTxtFade = 1;
-            }
-        
-        if(!keys[LEFT] && !keys[RIGHT]) {
-            if(this.xvel>0) {
-                this.xvel -= this.moveSpeed;
-            }
-            if(this.xvel<0) {
-                this.xvel += this.moveSpeed;
-            }
-            /*A quick fix to stop player from
-                moving in a single direction.*/
-            if(this.xvel<0.1&&this.xvel>0){this.xvel=0;}
-            if(this.xvel>-0.1&&this.xvel<0){this.xvel=0;}
-        }
-
-        // Checks if we're able to jump
-        if(keys[UP] && !this.falling) {
-            this.yvel = -this.jumpHeight;
-        }
-        
-        // Adds gravity to player
-        this.yvel += this.gravity;
-        
-        // Checks x and y max velocity speeds
-        if(this.yvel > this.maxFallSpeed) {
-            this.yvel = this.maxFallSpeed;}
-        
-        if(this.xvel > this.maxMoveSpeed) {
-            this.xvel = this.maxMoveSpeed;}
-            
-        if(this.xvel < -this.maxMoveSpeed) {
-            this.xvel = -this.maxMoveSpeed;}
-        
-        
-        this.x += this.xvel;}
-        // Checks LEFT and RIGHT cofllision
-        this.collideWith(this.xvel,0,platforms);
-        
-
-        // Always asume that the player is in the air.
-        // NOTE: This will be set to false if the collideWith function
-        //       finds that the player is on a platform.
-        this.falling = true;
-        
-        
-        this.y += this.yvel;
-        // Checks TOP and BOTTOM collision
-        this.collideWith(0,this.yvel,platforms);
-        
-    },
-    
-    collideWith: function(xv,yv,platforms) {
-        for (var i = 0; i < platforms.length; i++) {
-            var p = platforms[i];
-            if( this.y+this.h > p.y &&
-                this.y        < p.y+p.h &&
-                this.x+this.w > p.x &&
-                this.x        < p.x+p.w)
-            {
-                // BOTTOM
-                if(yv>0) {
-                    this.yvel = 0;
-                    this.falling = false;
-                    this.y = p.y-this.h;
-                }
-                // TOP
-                if(yv<0) {
-                    this.yvel = 0;
-                    this.falling = true;
-                    this.y = p.y+p.h;
-                }
-                // RIGHT
-                if(xv>0) {
-                    this.xvel = 0;
-                    this.x = p.x-this.w;
-                }
-                // LEFT
-                if(xv<0) {
-                    this.xvel = 0;
-                    this.x = p.x+p.w;
-                }
-            }
-        }
-    },
-    
-    draw : function() {
-        noStroke();
-        fill(252, 247, 154, frameCount * 2);
-        rect(this.x, this.y, this.w, this.h);
-        fill(0, 0, 0, frameCount * 2);
-        rect(this.x, this.y + this.w / 1.8, this.w, this.h / 2.2);
-        rect(this.x, this.y, this.w, this.h / 5);
-        fill(255, 0, 255, frameCount * 2);
-        ellipse(sin(frameCount * 6) + this.x + this.w / 4, this.y + this.h / 2.8, this.w / 4, this.h / 4);
-        ellipse(sin(frameCount * 6) + this.x + this.w - this .w / 4, this.y + this.h / 2.8, this.w / 4, this.h / 4);
-    },
-    
-};
-/* Block Object */
-var Block = function (x,y,w,h,c) {
-    this.x = x; this.y = y;
-    this.w = w; this.h = h;
-    this.c = c || color(255,0,0);
-};
-Block.prototype.draw = function() {
-    noStroke();
-    fill(this.c);
-    rect(this.x,this.y,this.w,this.h);
-};
-var blocks = [];
-blocks.add = function(x,y,w,h,c) {
-    blocks.push(new Block(x,y,w,h,c));
-};    
-blocks.apply = function() {
-    blocks.forEach(function(block){block.draw();});
-};   
-var Diamond = function(x,y,w,h) {
-    this.x = x; this.y = y;
-    this.w = w; this.h = h;
-    this.collected = false;
-}; 
-Diamond.prototype.draw = function() {
-    if(!this.collected) {
-        fill(43, 170, 255);
-        beginShape();
-        var x = this.x; var y = this.y;
-        var w = this.w; var h = this.h;
-        vertex(x + w - (w / 4), y);
-        vertex(x + w / 4, y);
-        vertex(x, y + h / 4);
-        vertex(x + w / 2, y + h);
-        vertex(x + w, y + h / 4);
-        endShape();
-        
-        
-        fill(255, 255, 255, 80);
-        beginShape();
-        vertex(x + w / 4, y);
-        vertex(x, y + h / 4);
-        vertex(x + w / 6, y + h / 4);
-        endShape();
-        
-        fill(255, 255, 255, 60);
-        beginShape();
-        vertex(x + w / 6, y + h / 4);
-        vertex(x, y + h / 4);
-        vertex(x + w / 2, y + h);
-        endShape();
-        
-        
-        fill(255, 255, 255, 30);
-        beginShape();
-        vertex(x + w / 4, y);
-        vertex(x + w / 6, y + h / 4);
-        vertex(x + w / 3, y + h / 4);
-        endShape();
-        
-        fill(255, 255, 255, 30);
-        beginShape();
-        vertex(x + w / 3, y + h / 4);
-        vertex(x + w / 6, y + h / 4);
-        vertex(x + w / 2, y + h);
-        endShape();
-        
-        fill(255, 255, 255, 10);
-        beginShape();
-        vertex(x + w / 4, y);
-        vertex(x + w / 2, y);
-        vertex(x + w / 3, y + h / 4);
-        endShape();
-        
-        
-        fill(255, 255, 255, 40);
-        beginShape();
-        vertex(x + w / 2, y);
-        vertex(x + w / 1.5, y + h / 4);
-        vertex(x + w / 3, y + h / 4);
-        endShape();
-        
-        fill(255, 255, 255, 10);
-        beginShape();
-        vertex(x + w / 2, y + h);
-        vertex(x + w / 1.5, y + h / 4);
-        vertex(x + w / 3, y + h / 4);
-        endShape();
-        
-        fill(0, 0, 0, 5);
-        beginShape();
-        vertex(x + w / 2, y + h);
-        vertex(x + w, y + h / 4);
-        vertex(x + w / 1.5, y + h / 4);
-        endShape();
-        
-        fill(0, 0, 0, 15);
-        beginShape();
-        vertex(x + w / 1.35, y);
-        vertex(x + w, y + h / 4);
-        vertex(x + w / 1.5, y + h / 4);
-        endShape();    
-    }
-};  
-Diamond.prototype.update = function() {
-    if(!this.collected) {
-        if(collide(plr,this)) {
-            this.collected = true; 
-            plr.funds += 100;
-        }    
-    }    
-};    
-var diamonds = [];
-diamonds.add = function(x,y,w,h) {
-    diamonds.push(new Diamond(x,y,w,h));  
-};    
-diamonds.apply = function() {
-    diamonds.forEach(function(diamond){diamond.draw(); diamond.update();});  
-};
-var Message = function(txt) {
-    pushStyle();
-    strokeWeight(4);
-    stroke(102, 58, 58);
-    fill(9, 141, 161);
-    rect(40,20,520,200); 
+    textFont(createFont("Arial"), 38);
+    text("Presents...", 193 + logoPos, 360);
     fill(255);
-    textFont(fonts.arial,25);
-    text(txt,80,40,450,150);
+    textSize(30);
+    text("Our motto: Create the best,\n or nothing.".substring(0,frames/4),200,300);
+    popMatrix();
+    // draw buttons
+    skip.draw();
+
+    return logoDismissed;
+};
+}//Logo Things
+var sX = -200,sY= 300;
+var pX = 650,pY = 250;
+{
+var drawMenu = function() {
+    background(255);
+    cursor(ARROW);
+    textFont(createFont("Chalkboard Italic"),86);
+    fill(0, 0, 0, 100);
+    text("AVALANCHE",300,182 + 7);
+    fill(255, 0, 0);
+    text("AVALANCHE",300,182);
+    noStroke();
+    fill(255, 0, 0,75);
+    rect(0,120,600,540);
+    fill(184);
+    rect(0,110,100,10);
+    fill(255,0,0);
+    rect(35,70,35,40);
+    fill(0);
+    textSize(30);
+    text('\u2934',100,70);
+    fill(0,255,0);
+    noStroke();
+    rect(90,10,40,40);
+    pushStyle();
+    Eye(mouseX,mouseY,110,30, 20, 40/6);
     popStyle();
-};    
-var Door = function(x,y) {
-    this.x = x;
-    this.y = y + 18;
-    this.activated = false;
-    this.w = 30; this.h = 60;
-};    
-Door.prototype.draw = function() {
+    var p = new Button(pX - 100,250,164 + 200,100,"PLAY",function(){currentScene = "CharacterCust"; frames = 0;},{borderColor: color(255),backColor: color(200),textColor: color(255,0,0),fontSize:85,otherBorderColor : color(0) });
+    var s = new Button(sX - 90,368,164,58,"SCORES",function(){currentScene = "Scores"; frames = 0;},{borderColor: color(255),backColor: color(200),textColor: color(255,0,0),fontSize:35,otherBorderColor : color(0),});
+    var t = new Button(sX + 90,368,164,58,"TUTORIAL",function(){currentScene = "Tutorial"; frames = 0;},{borderColor: color(255),backColor: color(200),textColor: color(255,0,0),fontSize:32,otherBorderColor : color(0)});
+    var x = new Button(sX ,448,164,58,"MODS",function(){currentScene = "Mods"; frames = 0;},{borderColor: color(255),backColor: color(200),textColor: color(255,0,0),fontSize:32,otherBorderColor : color(0)});
+    if(pX > 229) {
+        pX-=5;
+        p.txt = '';
+        p.enabled = false;
+        t.txt = '';
+        t.enabled = false;
+        x.txt = '';
+        x.enabled = false;
+    }    
+    if(sX < 223) {
+        sX+=5;    
+        s.txt = '';
+        s.enabled = false;
+        
+    }
+    s.draw();
+    p.draw();
+    t.draw();
+    x.draw();
+    fill(255, 0, 0);
+    rect(160,0,40,40);
+    fill(255,255,0);
+    textSize(40);
+    text("!",180,20);
     pushStyle();
     strokeWeight(3);
-    stroke(182);
-    fill(223);
-    rect(this.x,this.y,30,60);
-    noStroke();
-    fill(196, 134, 33);
-    ellipse(this.x + 20, this.y + 30, 8,8);
+    stroke(255);
+    fill(0);
+    rect(0,572,width,25);
+    fill(255);
+    textSize(12);
+    text(menuMessages[msg],300,585);
     popStyle();
-};
-Door.prototype.update = function() {
-    if(collide(plr,this)) {
-        Message("Press Space to Activate!");
-        if(keys[32]) {
-            lvl += 1;
-            objects.remove();
-            loadMap();
-            timeLeft = 60;
-        }    
-   }       
 };    
-var doors = [];
-doors.add = function(x,y) {
-    this.push(new Door(x,y));    
-};    
-doors.apply = function() {
-    doors.forEach(function(door) {
-        door.draw();
-        door.update();
-    });    
-};  
-var bullets = [];
-var addBullet = function(x,y,size,xVel,yVel,col) {
-    var b = {
-        x: x,
-        y: y,
-        size: size,
-        xVel: xVel,
-        yVel: yVel,
-        col: col
-    };
-    bullets.push(b);
-};
-var updateBullets = function() {
-
-    for (var i=bullets.length-1; i >= 0; i--) {
-        var b = bullets[i];
-        
-        if (b.x < -50 || b.x > 650 || b.y < -50 || b.y > 650) {
-            bullets.splice(i, 1);
-            
-        } else {
-            b.x += b.xVel;
-            b.y += b.yVel;
-            
-        }
-        //if(true){throw "kek";}
+}//Menu
+var back = new Button(1, 560, 80, 30, 'MENU', function() { currentScene = "Menu"; },{borderColor: color(255)});
+{
+var drawHighScores = function() {
+    background(255,255,0);
+    confettiBK();
+    cursor(ARROW);
+    textFont(createFont("Chalkboard"),40);
+    fill(0);
+    text("HIGH SCORES",300,40);
+    fill(176, 26, 26);
+    text("Name",190,100);
+    text("Score",410,100);
+    for(var i in highScores) {
+    textSize(30);
+    fill(0);
+    text(highScores[i].name,190,150 + i * 50);   
+    text(highScores[i].score,410,150 + i * 50); 
     }
+    back.draw();
 };
-var drawBullets = function() {
-    for (var i = 0; i < bullets.length; i++) {
-        var b = bullets[i];
-        fill(b.col);
-        noStroke();
-        ellipse(b.x, b.y, b.size, b.size);
-    }
-};
+}//High Scores
 
-var Gun = function(x,y) {
-    this.x = x;
-    this.y = y;
-    this.w = 15;
-    this.h = 15;
-    this.pickedup = false;
-    this.delay = 5;
-    this.timer = 5;
-    this.reload = 10;
-    this.reloadTime = 0;
-    this.ammo = 10;
-    this.ableToShoot = true;
+{
+var drawMods = function() {
+   background(0,0,255);
+   var returnToMenu = new Button(10, 10, 180, 30, 'Return to Menu',function() { currentScene = "Menu";});
+   returnToMenu.draw();
 };
-Gun.prototype.draw = function() {
-    pushMatrix();
-    translate(this.x+5,this.y);
-    
-    scale(0.2);
-    noStroke();
-    fill(64, 64, 64);
-    rect(-100, 0, 195, 8);
-    rect(95, -1, 27, 10);
-    rect(-100, 13, 217, 8);
-    rect(33, -4, 5, 3);
-    fill(54, 54, 54);
-    rect(58, 11, 1, 12);
-    rect(57, 12, 4, 10);
-    rect(52, 12, 4, 10);
-    rect(46, 12, 4, 10);
-    rect(40, 12, 4, 10);
-    
-    // barrel decorations
-    fill(18, 18, 18);
-    ellipse(108, -1, 13, 1);
-    ellipse(108, 2, 13, 1);
-    ellipse(108, 5, 13, 1);
-    ellipse(108, 8, 13, 1);
-    fill(97, 97, 97);
-    rect(-20, -2, 60, 21);
-    fill(84, 84, 84);
-    rect(-25, -2, 60, 27);
-    triangle(35, 15, 35, 25, 42, 20);
-    rect(35, 216, 7, 5);
-    fill(97, 97, 97);
-    triangle(25, 4, 35, 4, 35, 9);
-    fill(97, 97, 97);
-    rect(-20, -2, 60, 7);
-    stroke(51, 51, 51);
-    strokeWeight(2);
-    line(35, 11, 38, 11);
-    line(35, 14, 38, 14);
-    noStroke();
-    fill(0, 0, 0);
-    ellipse(30, 1, 10, 2);
-    ellipse(18, 1, 10, 2);
-    ellipse(6, 1, 10, 2);
-    
-    // pump action part decorations
-    strokeWeight(1);
-    stroke(94, 94, 94);
-    line(19, 7, 19, 21);
-    line(15, 7, 15, 21);
-    line(11, 7, 11, 21);
-    line(7, 7, 7, 21);
-    line(3, 7, 3, 21);
-    noStroke();
-    fill(71, 71, 71);
-    rect(-5, 24, 15, 3);
-    rect(-2, 26, 8, 30);
-    stroke(51, 51, 51);
-    strokeWeight(1);
-    line(-2, 34, 5, 34);
-    line(-2, 36, 5, 36);
-    line(-2, 38, 5,38);
-    line(-2, 40, 5, 40);
-    line(-2, 42, 5, 42);
-    line(-2, 44, 5, 44);
-    line(-2, 46, 5, 46);
-    line(-2, 48, 5, 48);
-    popMatrix();
-};
-Gun.prototype.update = function() {
-    if(this.pickedup) {
-        this.x = plr.x + plr.w;
-        this.y = plr.y;
-        if (this.ammo > 0) {
-            this.ableToShoot = true;
-        }
-        if (this.timer < this.delay) {
-            this.ableToShoot = false;
-        }
-        if (this.ammo <= 0) {
-            if (this.reloadTime >= this.reload) {
-                this.ammo = 0;
-                this.reloadTime = 0;
-            } else {
-                this.reloadTime++;
+}//Mods
+var resetGame = function(ended) {
+    var e = ended || false;
+    score = 0;
+    loseTimer = 0;
+    Lose_Text = '';
+    scoreboard.resetS();
+    player.y = 10170;
+    player.dead = false;
+    DeathTimer = 0;
+    for(var i in particles) {
+                particles.splice(i,1);    
             }
-        }
-        if (mouseIsClicked && this.ammo > 0 && this.ableToShoot === true) {
-            var cursorXDist = -(this.x) + mouseX;
-            var cursorYDist = -(this.y) + mouseY;
-            var magnitude = sqrt(sq(cursorXDist) + sq(cursorYDist));
-            addBullet(this.x+this.w,
-                this.y,
-                9,
-                cursorXDist / magnitude * 5,
-                cursorYDist / magnitude * 5,
-                color(0));
-        }
+    for(var i in platforms) {
+                if(platforms[i] instanceof Block) {
+                    platforms.splice(i,platforms.length);    
+                }
+            }
+    lavaY = 10420;
+    lavaH = 0; 
+    if(e) {
+        gamesPlayed+=1;    
     }
-    else { 
-        if(collide(plr,this)) {
-            this.pickedup = true;    
+};
+{
+var calculateAverageScore = function() {
+    return totalScore/gamesPlayed;    
+};
+var updateBestScore = function(score) {
+    if(score > bestScore) {
+        bestScore = score;   
+        newBest = true;
+    }
+};
+
+var drawLoseScreen = function() {
+    background(255);
+    cursor(ARROW);
+    fill(0);
+    textSize(25);
+    text("YOU HAVE DIED!\nYOU ENDED UP CLIMBING".substring(0,frames/3),300,200);
+    textSize(50);
+    text(score + " ft.",300,260);
+    if(frames/3 >= "YOU HAVE DIED!\nYOU ENDED UP CLIMBING".length) {
+        if(score < scoreboard.score) {
+            score++;  
+            totalScore += 1;
+        } else {
+            updateBestScore(score);
+            textSize(30);
+            if(newBest) {
+            fill(random(0,255),random(0,255),random(0,255));
+            text("NEW HIGH SCORE!",300,120);
+            }
+            fill(0);
+            textSize(26);
+            text("Best Score: " + bestScore,200,50);
+            text("Average Score: " + calculateAverageScore().toFixed(2),450,50);//The toFixed() method shortens the number to two decimal places
+            var replay = new Button(210, 300, 180, 30, 'REPLAY', function() { 
+            resetGame(true);
+            currentScene = "Game";
+            newBest = false;
+            });
+            var menu = new Button(210, 350, 180, 30, 'MENU',function(){ resetGame(true); currentScene = "Menu"; newBest = false;});
+            menu.draw();
+            replay.draw();
+            loseTimer+=0.5;
+            if(score > scoreToBeat && score < WinningScore) {    
+                Lose_Text = "Looks like you qualified for the high-scores! \nSave this as a spin-off to get credit!";   
+            } else if(score > scoreToBeat && score > WinningScore) {
+                Lose_Text = "Congratulations, you have taken first place! \nSave this as a spin-off!";    
+            } else if(score > 21 && score < scoreToBeat) {
+                Lose_Text = "You were SO CLOSE to the High-Scores list! Good luck next time! :)";     
+            } else if(score === WinningScore) {
+                Lose_Text = "Looks like you tied the Winning Score!\nUnfortunately, since they got it first... you will have to settle for only being in the high scores :(";             
+            } else if (score === 21) {
+                Lose_Text = "Um... ok. You didn't get past the beginning score. Either you didn't try, are AFK, or \nyour controls are messed up.";   
+            } 
+            textSize(15);
+            fill(0);
+            text(Lose_Text.substring(0,loseTimer),300,400);
+            println(totalScore);
         }
     }    
 };
-var guns = [];
-guns.add = function(x,y) {
-    this.push(new Gun(x,y));    
-};
-guns.apply = function() {
-    guns.forEach(function(gun){gun.draw();gun.update();});   };
-var Guard = function() {
-    
-};
-var gameTxt = function(txt) { 
-    fill(0,0,0,gameTxtFade);
-    text(txt,300,300);
-    gameTxtFade++;
-};
-var levels = [
-    ['        ',
-     '       ',
-     '        ',
-     '        ',
-     '        ',
-     '        ',
-     '        ',
-     '        ',
-     '        ',
-     '        ',
-     '        ',
-     'P        ',
-     '              D',
-     '            ',
-     'bbbbb   bbbbbbb        '],
-     ['',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     'P    ddd      D',
-     '     bbb      ',
-     'bbb       bbbbbb'],
-     ['',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     'P             D',
-     '',
-     'bbbbbbbbbbbbbbbb'],
-     ['',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     '',
-     'P             D',
-     '     g',
-     'bbbbbbbbbbbbbbbb']];
-var gameMessages = ["You are a professional heister. Use the arrow keys to \n move. Get to the door.","Collect these diamonds to improve your funds. They are\nworth $100 each.", "Remember: You only have 60 seconds to complete each \nlevel.","Whoa! You found a gun! Go ahead and pick it up! Use the\n mouse to aim, and click to shoot."];
-objects = [doors,blocks,diamonds,guns];
-objects.remove = function() {
-    for (var i = 0; i < objects.length; i++) {
-        for (var j = 0; j < objects[i].length; j++) {
-            objects[i].splice(j, objects[i].length);
+}//Lose Screen
+{
+var tPlatforms = [];
+tPlatforms.push(platform);
+var currentMessage = 0;
+var lavaRise = false;
+var lavaRising = false;
+var messages = ['Welcome to AVALANCHE, \nthe game!','This little square is you!','Use the arrow/WAD keys\n to move around!','Look at that:\n a scoreboard!','To pause the game, press P','Beware of the rising liquid! \n(However, since this is a \n tutorial, you will not die!) :D','Before you go: one last \nthing: DO NOT GET CRUS\nHED BY FALLING BLOCKS!:)','Press space to continue\n to the menu when you \nare ready!'];
+var drawTutorial = function() {
+    background(184, 236, 255);   
+    cursor(ARROW);
+    if(currentMessage >= 5) {
+        noStroke();
+        lavaY-=LAVA_SPEED;
+        lavaH+=LAVA_SPEED;
+        lavaRising = true;
+        if(lavaH < 35) {
+        scroll((platform.x-100)*-1,(lavaY-300)*-1);
+        lavaRise = true;
+        } else {
+            scroll((player.x - 300)*-1,(player.y-300)*-1); 
+            lavaRise = false;
         }
+    }   else {
+        scroll((player.x - 300)*-1,(player.y-300)*-1); 
     }
-};
-loadMap = function() {
-    for(var col=0; col<levels[lvl].length; col++){
-        for(var row=0; row<levels[lvl][col].length; row++){
-            var i = levels[lvl][col][row];
-            var ix = row * 40; var iy = col * 40;
-            switch(i) {
-                case "b" :
-                    blocks.add(ix,iy,40,40);
-                break;
-                case "P" :
-                    plr.x = ix; plr.y = iy;
-                break; 
-                case "d" :
-                    diamonds.add(ix,iy,30,30);
-                break;    
-                case "D" :
-                    doors.add(ix,iy);
-                break;    
-                case "g" :
-                    guns.add(ix,iy);
-                break;    
-            }    
-        }
-    }
-};    
-var getCurrentButtons = function() {
-    var buttons;
-    switch (scene) {
-        case 'splash':
-            buttons = drawLogo.buttons;
-            break;
-        case 'menu':
-            buttons = menuBtns;
-            break;
-    }
-    return buttons instanceof Array ? buttons : []; // make sure we're returning an array
-
-};
-mouseMoved = mouseOver = function() {
-    // find which button is beneath the mouse
-    var button = getCurrentButtons().find(function(button) {
-        return button.mouseIsOver;
-    });
-    // set cursor depending on what's beneath it
-    cursor(button ? HAND : ARROW);
-
-};
-
-mouseClicked = function() {
-    // find which button is beneath the mouse
-    var button = getCurrentButtons().find(function(button) {
-        return button.mouseIsOver;
-    });
-
-    if (button) {
-        // perform the action associated with the clicked button
-        button.onClick(button);
-    } 
-    mouseIsClicked = true;
-};
-var textRainbow = function(t, x, y, s, a, i) {
-    pushMatrix();
-    translate(x, y);
-    rotate(a);
-    textSize(s);
-    textAlign(CENTER, CENTER);
-    colorMode(HSB);
-    textFont(createFont("comic sans ms"));
-    fill(HeistC%255, 255, 255, i);
-    text(t, 0, 0);
-    popMatrix();
-    colorMode(RGB);
-};
-loadMap();
-var draw = function() {
-    frames++;
-    if (scene === 'splash') {
-        drawLogo();
-        if (drawLogo()) {
-            changeScene('menu');
-        }
-    } else if (scene === 'menu') {
-        background(255);
-        textRainbow("HEIST",300,150,150+sin(frameCount*10)*10,sin(frameCount*5)*10);
-        menuBtns.forEach(function(btn) {btn.draw();});
-        HeistC++;
-    } else if(scene === 'game') {
-        background(255);
+    if(currentMessage === 1) {
         fill(0);
-        if(lvl >= 1) {
-            text("Funds: $" + plr.funds,300,20);
+        textSize(30);
+        text("\uA71C",player.x + player.w/2,player.y - 5);
+    }
+    pushMatrix();
+    translate(player.x + 100,player.y -  110);
+    fill(0,0,0,70);
+    rect(-300,310,400,60);
+    fill(255);
+    textSize(30);
+    text("Press T to skip",-100,340);
+    if(currentMessage === 3) {
+    fill(0);
+    textSize(40);
+    text('\u27B1', 100,-150);   
+    }
+    scoreboard.board();
+    popMatrix();
+    scoreboard.update();
+    noStroke();
+    fill(255,0,0,70);
+    rect(platform.x,lavaY,5000,lavaH);
+    pushMatrix();
+    translate(player.x - 300,player.y - 400);
+    noStroke();
+    fill(0,0,0,120);
+    rect(0,100,250,160);
+    fill(255);
+    textSize(currentMessage === 5? 17:19);
+    text(messages[currentMessage],120,130);
+    textSize(11);
+    text(currentMessage === 7? '' : "Press Space to continue",80,240);
+    popMatrix();
+    player.draw();
+    player.update(tPlatforms);
+    for(var i in tPlatforms) {
+        tPlatforms[i].draw();
+        if(tPlatforms[i] instanceof Block) {
+            tPlatforms[i].update();    
         }
-        if(lvl >= 2) {
-            text("Time Left: " + timeLeft,70,20);
-            timeCnt++;
-            if(timeCnt >= 100) {
-                timeCnt = 0;
-                //timeLeft -= 1;
+    }
+    if(keys[32] && keyDelay === 0 && !lavaRise) {
+        keyDelay = 20;
+        currentMessage += 1;    
+        if(currentMessage === 8) {
+            currentScene = "Menu";
+            currentMessage = 0;
+            resetGame();
+        }
+    }
+    if(keys[T]) {
+        currentScene = "Menu";
+        resetGame();
+        currentMessage = 0;
+    }
+};
+}//Tutorial
+{
+var col = player.color;
+var colors = [color(217, 217, 50),color(0,0,255),color(247, 8, 247),color(24, 242, 220),color(252, 151, 10), color(252, 34, 10), color(5, 250, 13),color(156, 33, 156),color(102, 8, 17),color(0, 255, 150)];
+var drawCharCust = function() {
+    background(255);
+    cursor(ARROW);
+    fill(255, 0, 0);
+    textSize(40);
+    text("Game Customization".toUpperCase(),300,50);
+    pushStyle();
+    strokeWeight(5);
+    stroke(0);
+    line(10,80,590,80);
+    popStyle();
+      for (var i = 0; i < colors.length; i++) {
+            fill(colors[i]);
+            noStroke();
+            rect(i * 30 + 65,190, 30, 30);
+            if (mouseX >= i * 30 + 65 && mouseX <= i * 30 + 65 + 30 && mouseY >= 190 && mouseY <= 220) {
+                cursor(HAND);
+                if(mouseIsClicked) {
+                    col = colors[i];
+                    player.color = colors[i];
+                }
             }
-            if(timeLeft <= 0) {
-                timeLeft = 60;
-                objects.remove();
-                loadMap();
+        }
+        textSize(22);
+        fill(0);
+        text("Player COLOR:",100,140);
+        fill(col);
+        noStroke();
+        rect(200,120,40,40);
+        
+        var Ready =  new Button(512, 560, 80, 30, 'Ready!', function() { currentScene = "Game"; gamesPlayed+=1;});
+        Ready.draw();
+};
+}//Character customization
+}//Scenes
+var addHighScore = function(name,score) {
+    highScores.push({name: name, score: score});    
+};
+
+addHighScore("Daba",1046);
+addHighScore("Canyon Wren",1013);
+addHighScore("Eden",936);
+addHighScore("CAUSTIC ZEPHYR",822);
+addHighScore("Nathan",663);
+var particles = [];
+var drawPause = function() {
+    background(255);
+    cursor(ARROW);
+    pushStyle();
+    stroke(0);
+    strokeWeight(5);
+    fill(191, 185, 185);
+    rect(100,100,400,400);
+    popStyle();
+    fill(255,0,0);
+    textSize(100);
+    text("PAUSED",300,150);
+    var menu = new Button(210, 220, 180, 30, 'MENU',function(){currentScene = "Menu"; paused = false;
+            resetGame();
+    },{backColor: color(0,0,255),textColor:color(255)});
+    var backToGame = new Button(210, 260, 180, 30, 'Back to Game',function(){paused = false;},{backColor: color(0,0,255),textColor:color(255)});
+    
+    menu.draw();
+    backToGame.draw();
+};//Pause screen
+var addBlock = function(arr) {
+    arr.push(new Block(random(platform.x + 120,600),player.y - 300,round(random(30,100)),color(round(random(0,255)),round(random(0,255)),round(random(0,255)),255)));
+};//Adds a block to the game
+var checkLavaCollision = function() {
+    if(collide(platform.x,lavaY,1000,lavaH,player)) {
+        player.dead = true;    
+    }
+};//Checks collision with lava
+draw = function() {
+    if(currentScene === "Logo") {
+        drawLogo();
+        cursor(ARROW);
+        if(drawLogo()) {currentScene = "Menu"; frames = 0;}
+    } else if (currentScene === "Menu") {
+        drawMenu();
+    } else if(currentScene === "Game") {
+    if(!paused) {
+        background(184, 236, 255);
+        scroll(-150,(player.y-200)*-1);
+        player.draw();
+        noStroke();
+        fill(255, 0, 0,122.5);
+        rect(platform.x,lavaY,1000,lavaH);
+        for(var i in platforms) {
+            platforms[i].draw();
+            if(platforms[i] instanceof Block) {
+                platforms[i].update();
             }
-        }    
-        gameTxt(gameMessages[lvl]);
-        diamonds.apply();
-        blocks.apply();
-        doors.apply();
-        plr.draw();
-        plr.update(blocks);
-        drawBullets();
-        updateBullets();
-        guns.apply();
-    }     
-    mouseIsClicked = false;
+        }
+        if(frameCount % 100 === 0) {
+            addBlock(platforms);
+        }//Add a block every 50 frames
+        
+        player.update(platforms);
+        
+        ellipse(60,150,50,50);
+        pushMatrix();
+        translate(550,player.y);
+        fill(255,255,0);
+        ellipse(-376,-175,40,40);//The sun!
+        if(deb) {
+            fill(0,0,0,75);
+            rect(-400,-130,100,150);
+            fill(255);
+            textSize(11);
+            text("Pos: "+round(player.x)+','+round(player.y),-355,-120);
+        }
+        scoreboard.board();
+        popMatrix();
+        scoreboard.update();
+        checkLavaCollision();
+        lavaY-=LAVA_SPEED;
+        lavaH+=LAVA_SPEED;
+        if(player.dead) {
+            
+                DeathTimer++;
+             if(DeathTimer < 30) {
+                particles.push({acceleration : new PVector(0, 0.05), velocity:new PVector(random(-1, 1), random(-1, 0)),position: new PVector(player.x,player.y), timeToLive : 105});
+            } 
+            if(DeathTimer >= 50) {
+                frames = 0;
+                currentScene = "Lose";    
+            }
+            runParticles();
+        }
+        if(keys[80] && keyDelay === 0 && !player.dead) {
+            paused = true;    
+            keyDelay = 30;
+        }
+        if(keys[R] && !player.dead && keyDelay === 0) {
+            keyDelay = 7;
+            resetGame();
+        }
+    } else {
+        drawPause(); 
+        if(keys[80] && keyDelay === 0) {
+            keyDelay = 30;
+            paused = false;    
+        }
+    }
+    } 
+    else if(currentScene === "Scores") {
+        drawHighScores();    
+    }
+    else if(currentScene === "Lose") {
+        drawLoseScreen();    
+    } else if(currentScene === "Tutorial") {
+        drawTutorial();        
+    }
+    else if(currentScene === "CharacterCust") {
+        drawCharCust();    
+    } else if(currentScene === "Mods") {
+        drawMods();   
+    }
+frames++; 
+if(keyDelay > 0) {
+keyDelay--;
+}
+mouseIsClicked = false;
+};//Draw function
+mouseClicked = function() {
+   mouseIsClicked = true; 
 };
-keyPressed = function() {
-    keys[keyCode] = true;
+mouseOut = function() {
+  if(currentScene === "Game") {
+    paused = true;    
+  }
 };
-keyReleased = function() {
-    keys[keyCode] = false;
-};
+}//Game code
+//All exactly 1044 lines of code
