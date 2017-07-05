@@ -6,7 +6,7 @@ var keys = [];
 var scene = 'splash';
 var HeistC = 0;
 var gameTxtFade = 0;
-var lvl = 1;
+var lvl = 7;
 var loadMap;
 var objects;
 var timeLeft = 60;
@@ -579,21 +579,20 @@ var plr = {
         //       finds that the player is on a platform.
         this.falling = true; 
         
-        
+        if(this.health <= 0) {
+                this.health = this.maxHealth;
+                objects.remove();
+                loadMap();
+            }
+            //println(this.health);
         this.y += this.yvel;
         // Checks TOP and BOTTOM collision
         this.collideWith(0,this.yvel,platforms,lockedDoors);
         for(var i = 0; i < bullets.length; i++) {
             if(collidingWithBullet(this,bullets[i]) && bullets[i].o!==this) {
             addParticleSystem('bullet-collision',{'x': bullets[i].x, 'y': this.y, 'col': colorArray(2)});
-            if(this.health > 0) {
                 this.health -= bullets[i].dmg;
-            }
-            if(this.health === 0) {
-                this.health = this.maxHealth;
-                objects.remove();
-                loadMap();
-            }
+            
             redTrans = 80;
             bullets.splice(i,1);
             }
@@ -1199,13 +1198,7 @@ Cannon.prototype.update = function() {
                 plrYDist / magnitude * 5,
                 color(0),
                 12,this);
-                for(var i=0;i<bullets.length;i++){
-                        if(collidingWithBullet(this.rectSize,bullets[i],"Rect") || collidingWithBullet(this.ellipseSize,bullets[i],"Ellipse")) {                   if(bullets[i].o === plr) {    
-                            this.health -= bullets[i].dmg;
-                            bullets.splice(i,1);
-                        }
-                    }
-                }
+                
         }   else {
             var xvel = 0;
             if(this.dir===0) {xvel = -2;}
@@ -1233,6 +1226,7 @@ var Gunner = function(x,y,d) {
     this.w = 40;
     this.h = 40;
     this.dir = d || 1;
+     this.angle = atan2(this.x-(plr.x +plr.w/2),plr.y-this.y);
 };
 Gunner.prototype.draw = function() {
     noStroke();
@@ -1257,6 +1251,7 @@ Gunner.prototype.draw = function() {
     } else {
         translate(this.x-5,this.y);    
     }
+    rotate(this.angle + 270);
     scale(0.2);
     noStroke();
     fill(64, 64, 64);
@@ -1322,8 +1317,9 @@ Gunner.prototype.draw = function() {
     popMatrix();
 };
 Gunner.prototype.update = function() {
+    this.angle = atan2(this.x-(plr.x +plr.w/2),plr.y-this.y);
     if(frameCount%100===99){
-        var plrXDist = -(this.x) + plr.x;
+        var plrXDist = -(this.x) + plr.x+plr.w/2;
         var plrYDist = -(this.y) + plr.y;
         var magnitude = sqrt(sq(plrXDist) + sq(plrYDist));
         addBullet(this.x,
@@ -1342,7 +1338,20 @@ gunners.add=function(x,y,d){
 gunners.apply=function(){
     this.forEach(function(gunner){gunner.draw();gunner.update();});    
 };
-
+var Laser = function(x,y,d) {
+   this.x = x;
+   this.y = y;
+   this.dir = d;
+   this.timer = 0;
+   this.On = true;
+   this.timeToTurnOn = 25;
+};
+Laser.prototype.draw = function() {
+    fill(255,0,0);
+    switch(this.dir) {
+        case 'left' : break;
+    }
+};
 var gameTxt = function(txt) { 
     fill(0,0,0,gameTxtFade);
     text(txt,300,300);
@@ -1454,9 +1463,9 @@ var levels = [
      'b P         D',
      'b  g  c      b',
     'bbbbbbbbbbbbbbbbbbb'],
-    ['b  ',
-     'b',
-     'b',
+    ['b              ',
+     'b             ',
+     'b             bbbb',
      'b         t',
      'b',
      'b',
@@ -1467,10 +1476,25 @@ var levels = [
      'b',
      'b',
      'b P           D',
-     'b  g        b',
+     'b           b',
+    'bbbbbbbbbbbbbbbbbbb'],
+    ['b              ',
+     'b             m',
+     'b             bbbb',
+     'b          ',
+     'b',
+     'b',
+     'b',
+     'b',
+     'b',
+     'b',
+     'b',
+     'b',
+     'b P           D',
+     'b    b b b b b b',
     'bbbbbbbbbbbbbbbbbbb']];
-var gameMessages = ["You are a professional heister. Use the arrow keys to \n move. Get to the door.","Collect these diamonds to improve your funds. They are\nworth $100 each.", "Remember: You only have 60 seconds to complete each \nlevel.","Whoa! You found a gun! Go ahead and pick it up! Use the\n mouse to aim, and click to shoot.","Your first enemy! It's a cuffer. Be careful! If it \ntouches you, you will be sent back to the beginning\nof the level!","Look! A locked door! Good\n thing you have the tools for\nexactly this occasion! Hold \nX to pick the lock while\nnear it. It takes about 5 \nseconds to pick.","A cannon! Each bullet does a bit of damage, but it\nfires in only one direction. It is, however,\nindestructable."];
-objects = [doors,blocks,diamonds,guns,guards, cannons];
+var gameMessages = ["So far, you remain undetected. Hurry up, get to the door.\n The guards are coming soon.","Nice! You found some diamonds! Take them. They sell for\n$100 each.", "If you don't complete the level in 60 seconds, the guards\nwill catch up to you and you will have to restart the \nlevel.","Go ahead and pick up the gun. You'll need it to continue.","It's a Security Guard. If he catches you, you will be\ntransported back to the start of the level.","A locked door. Luckily, you have the tools to pick it.","The security in this place includes weapons like cannons. \nDon't get hit too many times.", "Another cannon. But this time, it's bullets are fired\n in your direction. Keep moving.","Another security guard. Be careful, \nhe shoots bullets in your direction."];
+objects = [doors,blocks,diamonds,guns,guards, cannons,bullets];
 objects.remove = function() {
     for (var i = 0; i < objects.length; i++) {
         for (var j = 0; j < objects[i].length; j++) {
@@ -1600,6 +1624,7 @@ var draw = function() {
         }    
         diamonds.apply();
         blocks.apply();
+        gunners.apply();
         doors.apply();
         plr.draw();
         plr.update(blocks,lockedDoors);
